@@ -44,6 +44,8 @@ class DatabaseInterface:
         self.users = BasicInterface(tables.User, self.main_session)
         self.history = BasicInterface(tables.History, self.main_session)
         self.companies = CompanyInterface(tables.Company, self.main_session)
+        self.symbols = BasicInterface(tables.Symbol, self.main_session)
+        self.closes = BasicInterface(tables.Close, self.main_session)
     
     def commit(self):
         self.main_session.commit()
