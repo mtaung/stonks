@@ -42,8 +42,7 @@ class Close(Base):
 
 class Symbol(Base):
     __tablename__= 'symbols'
-    id = Column(Integer, primary_key=True)
-    symbol = Column(String(6))
+    symbol = Column(String(6), primary_key=True)
     name = Column(String(50))
     stock_type = Column(String(5))
     
