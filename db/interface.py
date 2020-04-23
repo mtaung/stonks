@@ -15,7 +15,6 @@ class BasicInterface:
         if kwargs:
             dbo = self.Table(**kwargs)
             self.session.add(dbo)
-            self.session.flush()
             return dbo
         return None
 
@@ -30,11 +29,6 @@ class StockInterface(BasicInterface):
     def company_inventory(self, company):
         return self.session.query(self.Table).filter(self.Table.company == company)
 
-class CompanyInterface(BasicInterface):
-
-    def get_active(self, id):
-        return self.session.query(self.Table).filter(self.Table.owner == id).filter(self.Table.active).first()
-
 class DatabaseInterface:
 
     def __init__(self, url):
@@ -42,10 +36,7 @@ class DatabaseInterface:
         Session = sessionmaker(bind=engine)
         self.main_session = Session()
         self.users = BasicInterface(tables.User, self.main_session)
-        self.history = BasicInterface(tables.History, self.main_session)
-        self.companies = CompanyInterface(tables.Company, self.main_session)
-        self.symbols = BasicInterface(tables.Symbol, self.main_session)
-        self.closes = BasicInterface(tables.Close, self.main_session)
+        self.companies = BasicInterface(tables.User, self.main_session)
     
     def commit(self):
         self.main_session.commit()
