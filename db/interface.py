@@ -7,14 +7,17 @@ class DatabaseInterface:
         Session = sessionmaker(bind=engine)
         self.session = Session()
     
-    def getall(self, Table, **kwargs):
+    def get_query(self, Table):
+        return self.session.query(Table)
+    
+    def get_all(self, Table, **kwargs):
         q = self.session.query(Table)
         for key in kwargs:
             q = q.filter(getattr(Table, key) == kwargs[key])
-        return q
+        return q.all()
     
     def get(self, Table, **kwargs):
-        q = self.getall(Table, **kwargs)
+        q = self.get_all(Table, **kwargs)
         return q.first()
     
     def add(self, obj):
