@@ -1,15 +1,41 @@
 from iexfinance import stocks
 from iexfinance.refdata import get_symbols
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, date, time, timedelta, timezone
+from pytz import timezone
 from utils import config
 from db.interface import DatabaseInterface
 from db.tables import Symbol, Close
 
+EDT = timezone('US/Eastern')
+MARKET_OPEN_TIME = time(4,30)
+MARKET_CLOSE_TIME = time(20)
+
 class Iex:
 
-    def __init__(self, token):
-        self.token = token
+    def __init__(self):
+        self.token = config.load('iex').get('token')
         self.db = DatabaseInterface('sqlite:///stonks.db')
+    
+    def market_time(self):
+        return datetime.now(tz=EDT)
+    
+    def market_open_status(self):
+        now = self.market_time()
+        return now.weekday() <= 4 and now.time() > MARKET_OPEN_TIME and now.time() < MARKET_CLOSE_TIME
+    
+    def time_to_open(self):
+        now = self.market_time()
+        weekend = min(max(6 - now.weekday(), 0), 2)
+        next_open = datetime(
+            now.year,
+            now.month,
+            now.day + 1 + weekend,
+            MARKET_OPEN_TIME.hour,
+            MARKET_OPEN_TIME.minute,
+            MARKET_OPEN_TIME.second,
+            MARKET_OPEN_TIME.microsecond,
+            tzinfo=now.tzinfo)
+        return next_open - now
 
     def price(self, symbol):
         stonk = stocks.Stock(symbol, token=self.token)
