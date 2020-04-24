@@ -10,19 +10,21 @@ class DatabaseInterface:
     def get_query(self, Table):
         return self.session.query(Table)
     
-    def get_all(self, Table, **kwargs):
+    def _get(self, Table, **kwargs):
         q = self.session.query(Table)
         for key in kwargs:
             q = q.filter(getattr(Table, key) == kwargs[key])
-        return q.all()
+        return q
+    
+    def get_all(self, Table, **kwargs):
+        return self._get(Table, **kwargs).all()
     
     def get(self, Table, **kwargs):
-        q = self.get_all(Table, **kwargs)
-        return q.first()
+        return self._get(Table, **kwargs).first()
     
     def add(self, obj):
         self.session.add(obj)
-        return None
+        self.session.flush()
     
     def count(self, Table):
         return self.session.query(Table).count()
