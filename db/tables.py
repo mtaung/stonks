@@ -27,7 +27,7 @@ class Stock(Base):
     __tablename__ = 'stocks'
     id = Column(Integer, primary_key=True)
     symbol = Column(String(6))
-    quantity = Column(Float)
+    quantity = Column(Integer)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
     purchase_value = Column(Float)
     purchase_date = Column(Date)

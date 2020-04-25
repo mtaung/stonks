@@ -26,6 +26,10 @@ def timedelta_string(delta):
 class StonksError(errors.CommandError):
     pass
 
+# TODO: pretty, concise printouts for frequent operations like sell/buy
+# limit company name length in printout
+# perhaps replace words like buy/sell with symbols?
+
 class Stonks(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -50,7 +54,7 @@ class Stonks(commands.Cog):
             await ctx.send(f"{symbol} is not a valid stock symbol.")
             raise StonksError()
     
-    @commands.command
+    @commands.command()
     async def register(self, ctx, company_name: str):
         """Register a company under your username, joining the game.\nUse quotation marks for names with multiple words or whitespace characters."""
         author = ctx.author
@@ -72,13 +76,14 @@ class Stonks(commands.Cog):
             self.db.commit()
             await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
-    @commands.command
+    @commands.command()
     async def buy(self, ctx, quantity: int, symbol: str):
         """Buy shares of a stock at market price."""
         symbol = symbol.upper()
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-        await self.market_open_check(ctx)
+        #TODO: uncomment
+        #await self.market_open_check(ctx)
         await self.stock_symbol_check(ctx, symbol)
         
         price = self.iex.price(symbol)
@@ -86,18 +91,70 @@ class Stonks(commands.Cog):
         if company.balance < cost:
             await ctx.send(f"{company.name}\nBalance: {company.balance} USD\nPurchase cost: {cost} USD")
             raise StonksError()
+
         self.db.add(Stock(symbol=symbol, quantity=quantity, company=company.id, purchase_value=price, purchase_date=self.iex.market_time()))
         company.balance -= cost
+        # TODO: log buys
         self.db.commit()
         await ctx.send(f"{company.name} BUYS {quantity} {symbol} for {cost} USD")
 
-    @commands.command
+    @commands.command()
+    async def sell(self, ctx, quantity: int, symbol: str):
+        """Sell shares of a stock at market price."""
+        symbol = symbol.upper()
+        author = ctx.author
+        company = await self.get_active_company(ctx, author)
+        # TODO: uncomment
+        #await self.market_open_check(ctx)
+        await self.stock_symbol_check(ctx, symbol)
+        
+        stocks = self.db.get_all(Stock, company=company.id, symbol=symbol)
+        inventory = sum([s.quantity for s in stocks])
+        if inventory < quantity:
+            await ctx.send(f"{company.name}\n{inventory} {symbol}")
+            raise StonksError()
+
+        price = self.iex.price(symbol)
+        value = 0
+        for s in stocks:
+            amnt = min(quantity, s.quantity)
+            s.quantity -= amnt
+            quantity -= amnt
+            value += price * amnt
+            if quantity == 0:
+                break
+        for s in stocks:
+            if s.quantity == 0:
+                self.db.delete(s)
+        company.balance += value
+        # TODO: log sales
+        self.db.commit()
+        await ctx.send(f"{company.name} SELLS {quantity} {symbol} for {value} USD")
+
+    @commands.command()
     async def balance(self, ctx):
         """Check balance on your active company."""
         author = ctx.author
         company = await self.get_active_company(ctx, author)
+
         await ctx.send(f"{company.name}\nBalance: {company.balance} USD")
     
+    @commands.command()
+    async def inv(self, ctx):
+        """Check stock owned by your active company."""
+        # UNFINISHED
+        # TODO: proper, pretty printout, stocks grouped by symbol
+        # QUANTITY SYMBOL
+        # nothing more
+        # OPTIONAL TODO: second command for detailed, verbose printout
+        author = ctx.author
+        company = await self.get_active_company(ctx, author)
+        stock = self.db.get_all(Stock, company=company.id)
+        msg = ""
+        for s in stock:
+            msg += f"{s.id} {s.symbol} {s.quantity} {s.purchase_value} {s.purchase_date}\n"
+        await ctx.send(msg)
+
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if isinstance(error, errors.UserInputError):
@@ -105,6 +162,7 @@ class Stonks(commands.Cog):
         elif isinstance(error, StonksError):
             pass
         else:
+            await ctx.send("⚠")
             raise error
 
 def setup(bot):
