@@ -3,4 +3,4 @@ from utils import config
 
 iex = Iex()
 
-iex.update_symbols()
+iex.splits()

@@ -45,4 +45,8 @@ class Symbol(Base):
     symbol = Column(String(6), primary_key=True)
     name = Column(String(50))
     stock_type = Column(String(5))
-    
+
+class Transactions(Base):
+    __tablename__='transactions'
+    symbol = Column(String(6), primary_key=True)
+        

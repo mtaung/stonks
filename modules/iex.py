@@ -4,7 +4,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from pytz import timezone
 from utils import config
 from db.interface import DatabaseInterface
-from db.tables import Symbol, Close
+from db.tables import Symbol, Close, Stock
 
 EDT = timezone('US/Eastern')
 MARKET_OPEN_TIME = time(4,30)
@@ -38,10 +38,37 @@ class Iex:
         return next_open - now
 
     def price(self, symbol):
-        stonk = stocks.Stock(symbol, token=self.token)
-        quote = stonk.get_quote()
+        quote = self.quote(symbol)
         return quote['latestPrice']
 
+    def quote(self, symbol):
+        stonk = stocks.Stock(symbol, token = self.token)
+        quote = stonk.get_quote()
+        return quote
+
+    def splits(self):
+        active_symbols = self.db.get_all(Stock)
+        unique_symbols = set([s.symbol for s in active_symbols])
+        pending_splits = []
+
+        for symbol in unique_symbols:
+            stock = stocks.Stock(symbol.symbol, token = self.token)
+            splits = stock.get_splits(range='5y')
+            for split in splits:
+                execution_date = split['exDate']
+                print(split)
+                if self.market_time().date()  == date.fromisoformat(execution_date):
+                    split['symbol'] = symbol
+                    pending_splits.append(split)     
+
+        for split in pending_splits:
+            affected_companies = set([s.company for s in active_symbols if s.symbol == split['symbol']])
+
+            for company in affected_companies:
+                
+
+
+    
     def update_symbols(self):
         symbols = get_symbols(token = self.token)
         # handle adding of symbols

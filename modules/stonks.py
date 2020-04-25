@@ -115,12 +115,12 @@ class Stonks(commands.Cog):
             raise StonksError()
 
         price = self.iex.price(symbol)
-        value = 0
+        value = price * quantity
+        sell_quantity = quantity
         for s in stocks:
             amnt = min(quantity, s.quantity)
             s.quantity -= amnt
             quantity -= amnt
-            value += price * amnt
             if quantity == 0:
                 break
         for s in stocks:
@@ -129,7 +129,7 @@ class Stonks(commands.Cog):
         company.balance += value
         # TODO: log sales
         self.db.commit()
-        await ctx.send(f"{company.name} SELLS {quantity} {symbol} for {value} USD")
+        await ctx.send(f"{company.name} SELLS {sell_quantity} {symbol} for {value} USD")
 
     @commands.command()
     async def balance(self, ctx):
