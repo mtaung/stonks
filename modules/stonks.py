@@ -50,7 +50,7 @@ class Stonks(commands.Cog):
             await ctx.send(f"{symbol} is not a valid stock symbol.")
             raise StonksError()
     
-    @commands.command(pass_context=True)
+    @commands.command
     async def register(self, ctx, company_name: str):
         """Register a company under your username, joining the game.\nUse quotation marks for names with multiple words or whitespace characters."""
         author = ctx.author
@@ -72,7 +72,7 @@ class Stonks(commands.Cog):
             self.db.commit()
             await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
-    @commands.command(pass_context=True)
+    @commands.command
     async def buy(self, ctx, quantity: int, symbol: str):
         """Buy shares of a stock at market price."""
         symbol = symbol.upper()
@@ -90,8 +90,8 @@ class Stonks(commands.Cog):
         company.balance -= cost
         self.db.commit()
         await ctx.send(f"{company.name} BUYS {quantity} {symbol} for {cost} USD")
-    
-    @commands.command(pass_context=True)
+
+    @commands.command
     async def balance(self, ctx):
         """Check balance on your active company."""
         author = ctx.author
