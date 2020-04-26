@@ -2,9 +2,10 @@ from iexfinance import stocks
 from iexfinance.refdata import get_symbols
 from datetime import datetime, date, time, timedelta, timezone
 from pytz import timezone
+from math import floor
 from utils import config
 from db.interface import DatabaseInterface
-from db.tables import Symbol, Close, Stock
+from db.tables import Symbol, Close, Stock, Company
 
 EDT = timezone('US/Eastern')
 MARKET_OPEN_TIME = time(4,30)
@@ -45,29 +46,77 @@ class Iex:
         stonk = stocks.Stock(symbol, token = self.token)
         quote = stonk.get_quote()
         return quote
+    
+    def splits_test(self, symbol):
+        # generate fake split data for a given symbol, for testing
+        if symbol == "TEST_SYM":
+            return [{
+                'exDate': "2020-04-26",
+                'toFactor': 7,
+                'fromFactor': 1}]
+        else:
+            return []
 
     def splits(self):
-        active_symbols = self.db.get_all(Stock)
-        unique_symbols = set([s.symbol for s in active_symbols])
-        pending_splits = []
+        unique_symbols = self.db.query(Stock.symbol).distinct().all()
+        pending_splits = {}
 
         for symbol in unique_symbols:
-            stock = stocks.Stock(symbol.symbol, token = self.token)
-            splits = stock.get_splits(range='5y')
+            # TODO: uncomment when done testing
+            #stock = stocks.Stock(symbol, token = self.token)
+            #splits = stock.get_splits(range='1m')
+            splits = self.splits_test(symbol)
             for split in splits:
-                execution_date = split['exDate']
-                print(split)
-                if self.market_time().date()  == date.fromisoformat(execution_date):
-                    split['symbol'] = symbol
-                    pending_splits.append(split)     
+                if self.market_time().date()  == date.fromisoformat(split['exDate']):
+                    pending_splits[symbol] = {
+                        'from': split['fromFactor'],
+                        'to': split['toFactor']}
 
-        for split in pending_splits:
-            affected_companies = set([s.company for s in active_symbols if s.symbol == split['symbol']])
+        for symbol in pending_splits:
+            affected_companies = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
+            fromFactor = pending_splits[symbol]['from']
+            toFactor = pending_splits[symbol]['to']
+            sell_price = self.quote(symbol)['close']
+            rebuy_price = sell_price * fromFactor / toFactor
+            for company_id in affected_companies:
+                # sell
+                inventory = sum(self.db.get_all(Stock.quantity, company=company_id, symbol=symbol))
+                self.sell(company_id, symbol, inventory, sell_price)
+                # rebuy
+                new_inventory = inventory * toFactor // fromFactor
+                self.buy(company_id, symbol, new_inventory, rebuy_price)
+    
+    def buy(self, company_id, symbol, quantity, price):
+        """Buy stock, at given price and quantity, without error checking."""
+        value = price * quantity
+        # add stock
+        self.db.add(Stock(symbol=symbol, quantity=quantity, company=company_id, purchase_value=price, purchase_date=self.market_time()))
+        # subtract balance
+        company = self.db.get(Company, id=company_id)
+        company.balance -= value
+        # TODO: log buy transaction
+        self.db.commit()
 
-            for company in affected_companies:
-                
-
-
+    def sell(self, company_id, symbol, quantity, price):
+        """Sell stock, at given price and quantity, without error checking."""
+        value = price * quantity
+        stocks = self.db.get_all(Stock.quantity, company=company_id, symbol=symbol)
+        # FIFO subtract stock
+        for s in stocks:
+            amnt = min(quantity, s.quantity)
+            s.quantity -= amnt
+            quantity -= amnt
+            if quantity == 0:
+                break
+        # delete 0 quant rows
+        for s in stocks:
+            if s.quantity == 0:
+                self.db.delete(s)
+        # add balance
+        company = self.db.get(Company, id=company_id)
+        company.balance += value
+        # TODO: log sell transaction
+        self.db.commit()
     
     def update_symbols(self):
         symbols = get_symbols(token = self.token)
