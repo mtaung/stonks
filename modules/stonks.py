@@ -92,10 +92,7 @@ class Stonks(commands.Cog):
             await ctx.send(f"{company.name}\nBalance: {company.balance} USD\nPurchase cost: {cost} USD")
             raise StonksError()
 
-        self.db.add(Stock(symbol=symbol, quantity=quantity, company=company.id, purchase_value=price, purchase_date=self.iex.market_time()))
-        company.balance -= cost
-        # TODO: log buys
-        self.db.commit()
+        self.iex.buy(company.id, symbol, quantity, price)
         await ctx.send(f"{company.name} BUYS {quantity} {symbol} for {cost} USD")
 
     @commands.command()
@@ -108,28 +105,15 @@ class Stonks(commands.Cog):
         #await self.market_open_check(ctx)
         await self.stock_symbol_check(ctx, symbol)
         
-        stocks = self.db.get_all(Stock, company=company.id, symbol=symbol)
-        inventory = sum([s.quantity for s in stocks])
+        inventory = sum(self.db.get_all(Stock.quantity, company=company.id, symbol=symbol))
         if inventory < quantity:
             await ctx.send(f"{company.name}\n{inventory} {symbol}")
             raise StonksError()
 
         price = self.iex.price(symbol)
         value = price * quantity
-        sell_quantity = quantity
-        for s in stocks:
-            amnt = min(quantity, s.quantity)
-            s.quantity -= amnt
-            quantity -= amnt
-            if quantity == 0:
-                break
-        for s in stocks:
-            if s.quantity == 0:
-                self.db.delete(s)
-        company.balance += value
-        # TODO: log sales
-        self.db.commit()
-        await ctx.send(f"{company.name} SELLS {sell_quantity} {symbol} for {value} USD")
+        self.iex.sell(company.id, symbol, quantity, price)
+        await ctx.send(f"{company.name} SELLS {quantity} {symbol} for {value} USD")
 
     @commands.command()
     async def balance(self, ctx):

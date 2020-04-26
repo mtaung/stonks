@@ -7,7 +7,7 @@ class DatabaseInterface:
         Session = sessionmaker(bind=engine)
         self.session = Session()
     
-    def get_query(self, Table):
+    def query(self, Table):
         return self.session.query(Table)
     
     def _get(self, Table, **kwargs):
