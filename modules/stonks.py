@@ -4,6 +4,10 @@ from discord.ext.commands import errors
 from db.interface import DatabaseInterface
 from db.tables import User, Company, History, Symbol, Stock
 from .iex import Iex
+from tabulate import tabulate
+import pandas as pd
+import numpy as np
+
 
 def name(user):
     return user.nick if hasattr(user, 'nick') else user.name
@@ -117,27 +121,46 @@ class Stonks(commands.Cog):
 
     @commands.command()
     async def balance(self, ctx):
+        # TODO: Expand to include net value and other company information.
         """Check balance on your active company."""
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-
-        await ctx.send(f"{company.name}\nBalance: {company.balance} USD")
+        embed = discord.Embed(title=f'Company: {company.name}', inline=True)
+        embed.add_field(name='Cash Assets:', value=f'{round(company.balance, 2)} USD')
+        await ctx.send(embed=embed)
     
     @commands.command()
     async def inv(self, ctx):
-        """Check stock owned by your active company."""
-        # UNFINISHED
-        # TODO: proper, pretty printout, stocks grouped by symbol
-        # QUANTITY SYMBOL
-        # nothing more
-        # OPTIONAL TODO: second command for detailed, verbose printout
+        """Simplified display of stocks owned by your current company."""
+        # CONSIDER: Using an entirely pd.DataFrame based structure rather than converting from list
         author = ctx.author
         company = await self.get_active_company(ctx, author)
         stock = self.db.get_all(Stock, company=company.id)
-        msg = ""
+        inventory = []
         for s in stock:
-            msg += f"{s.id} {s.symbol} {s.quantity} {s.purchase_value} {s.purchase_date}\n"
-        await ctx.send(msg)
+            inventory.append([s.symbol, s.quantity, s.purchase_value])
+        inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
+        aggregated = tabulate(inv_df.groupby(['Symbol']).sum().reset_index(), headers=['Symbol', 'Quantity', 'Purchase Value'])
+        await ctx.send(f'```{aggregated}```')
+
+    @commands.command()
+    async def breakdown(self, ctx):
+        # TODO: At the problem, this is assigning +/- based on testing parameters
+        #       In production, we want to assign this based on current price of each stock. 
+        #       This can potentially expend a lot of API calls, so we need to consider how to handle that.
+        """Simplified display of stocks owned by your current company."""
+        author = ctx.author
+        company = await self.get_active_company(ctx, author)
+        stock = self.db.get_all(Stock, company=company.id)
+        inventory = []
+        for s in stock:
+            inventory.append([s.symbol, s.quantity, s.purchase_value])
+        inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
+        inv_df['sign'] = np.where(inv_df['Symbol'].str.contains('A'), '+', '-')
+        inv_df = inv_df.sort_values(['Symbol'])
+        inv_df = inv_df[['sign', 'Symbol', 'Quantity', 'Purchase Value']]
+        aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', 'Symbol', 'Quantity', 'Purchase Value'])
+        await ctx.send(f'```diff\n{aggregated}```')
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
