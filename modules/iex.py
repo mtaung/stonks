@@ -111,7 +111,7 @@ class Iex:
     def sell(self, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
         value = price * quantity
-        stocks = self.db.query(Stock).filter(Stock.company==company_id).filter(Stock.symbol==symbol)
+        stocks = self.db.query(Stock).filter(Stock.company==company_id).filter(Stock.symbol==symbol).order_by(Stock.purchase_date.desc())
         # FIFO subtract stock
         for s in stocks:
             amnt = min(quantity, s.quantity)
@@ -140,9 +140,6 @@ class Iex:
         # handle removal of symbols?
         # I think this is a bit more complicated, because what happens if someone owns stock etc
         # leave for later
-    
-    def symbols(self):
-        return self.db.get_all(Symbol)
     
     def history(self, symbol):
         # TODO: account for timezones, account for weekends, then define start and end dates based on that
