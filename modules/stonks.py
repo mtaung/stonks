@@ -1,4 +1,4 @@
-import discord, datetime
+import discord
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DatabaseInterface
@@ -7,7 +7,6 @@ from .iex import Iex
 from tabulate import tabulate
 import pandas as pd
 import numpy as np
-
 
 def name(user):
     return user.nick if hasattr(user, 'nick') else user.name

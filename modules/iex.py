@@ -15,7 +15,6 @@ def _list(list_of_tuples):
     return [v for (v,) in list_of_tuples]
 
 class Iex:
-
     def __init__(self):
         self.token = config.load('iex').get('token')
         self.db = DatabaseInterface('sqlite:///stonks.db')
