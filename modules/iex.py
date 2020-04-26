@@ -43,44 +43,55 @@ class Iex:
         return quote['latestPrice']
 
     def quote(self, symbol):
-        stonk = stocks.Stock(symbol, token = self.token)
-        quote = stonk.get_quote()
-        return quote
+        return stocks.Stock(symbol, token = self.token).get_quote()
     
     def splits_test(self, symbol):
         # generate fake split data for a given symbol, for testing
-        if symbol == "TEST_SYM":
+        # TODO: remove
+        if symbol == "A":
             return [{
                 'exDate': "2020-04-26",
-                'toFactor': 7,
-                'fromFactor': 1}]
+                'toFactor': 1,
+                'fromFactor': 7}]
         else:
             return []
 
     def splits(self):
         unique_symbols = self.db.query(Stock.symbol).distinct().all()
+        unique_symbols = [v for (v,) in unique_symbols]
         pending_splits = {}
 
         for symbol in unique_symbols:
-            # TODO: uncomment when done testing
-            #stock = stocks.Stock(symbol, token = self.token)
-            #splits = stock.get_splits(range='1m')
-            splits = self.splits_test(symbol)
+            stock = stocks.Stock(symbol, token = self.token)
+            splits = stock.get_splits(range='1m')
+            # TODO: remove line
+            #splits = self.splits_test(symbol)
             for split in splits:
                 if self.market_time().date()  == date.fromisoformat(split['exDate']):
                     pending_splits[symbol] = {
                         'from': split['fromFactor'],
                         'to': split['toFactor']}
-
+                    print(f"{split['exDate']} detected split of {symbol} {split['fromFactor']}-to-{split['toFactor']}")
+        
+        # modeling split as:
+        # selling existing inventory at last known (close) price
+        # rebuying inventory at price * ratio and quantity / ratio
+        # ratio = fromFactor / toFactor
+        # company gets to keep liquidated cash in case of division with remainder
         for symbol in pending_splits:
             affected_companies = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
+            affected_companies = [v for (v,) in affected_companies]
+
             fromFactor = pending_splits[symbol]['from']
             toFactor = pending_splits[symbol]['to']
+
             sell_price = self.quote(symbol)['close']
             rebuy_price = sell_price * fromFactor / toFactor
+
             for company_id in affected_companies:
                 # sell
-                inventory = sum(self.db.get_all(Stock.quantity, company=company_id, symbol=symbol))
+                inventory = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).all()
+                inventory = sum([v for (v,) in inventory])
                 self.sell(company_id, symbol, inventory, sell_price)
                 # rebuy
                 new_inventory = inventory * toFactor // fromFactor
@@ -100,7 +111,7 @@ class Iex:
     def sell(self, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
         value = price * quantity
-        stocks = self.db.get_all(Stock.quantity, company=company_id, symbol=symbol)
+        stocks = self.db.query(Stock).filter(Stock.company==company_id).filter(Stock.symbol==symbol)
         # FIFO subtract stock
         for s in stocks:
             amnt = min(quantity, s.quantity)
