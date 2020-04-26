@@ -121,11 +121,13 @@ class Stonks(commands.Cog):
 
     @commands.command()
     async def balance(self, ctx):
+        # TODO: Expand to include net value and other company information.
         """Check balance on your active company."""
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-
-        await ctx.send(f"{company.name}\nBalance: {company.balance} USD")
+        embed = discord.Embed(title=f'Company: {company.name}', inline=True)
+        embed.add_field(name='Cash Assets:', value=f'{round(company.balance, 2)} USD')
+        await ctx.send(embed=embed)
     
     @commands.command()
     async def inv(self, ctx):
@@ -157,7 +159,6 @@ class Stonks(commands.Cog):
         inv_df['sign'] = np.where(inv_df['Symbol'].str.contains('A'), '+', '-')
         inv_df = inv_df.sort_values(['Symbol'])
         inv_df = inv_df[['sign', 'Symbol', 'Quantity', 'Purchase Value']]
-        print(inv_df)
         aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', 'Symbol', 'Quantity', 'Purchase Value'])
         await ctx.send(f'```diff\n{aggregated}```')
 
