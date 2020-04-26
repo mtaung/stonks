@@ -138,7 +138,7 @@ class Stonks(commands.Cog):
         stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
-            inventory.append([s.symbol, s.quantity, s.purchase_value])
+            inventory.append([s.symbol, s.quantity, s.purchase_price])
         inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
         aggregated = tabulate(inv_df.groupby(['Symbol']).sum().reset_index(), headers=['Symbol', 'Quantity', 'Purchase Value'])
         await ctx.send(f'```{aggregated}```')
@@ -154,7 +154,7 @@ class Stonks(commands.Cog):
         stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
-            inventory.append([s.symbol, s.quantity, s.purchase_value])
+            inventory.append([s.symbol, s.quantity, s.purchase_price])
         inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
         inv_df['sign'] = np.where(inv_df['Symbol'].str.contains('A'), '+', '-')
         inv_df = inv_df.sort_values(['Symbol'])

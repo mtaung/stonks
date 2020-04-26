@@ -133,7 +133,7 @@ class Iex:
         """Buy stock, at given price and quantity, without error checking."""
         value = price * quantity
         # add stock
-        self.db.add(HeldStock(symbol=symbol, quantity=quantity, company=company_id, purchase_value=price, purchase_date=self.market_time()))
+        self.db.add(HeldStock(symbol=symbol, quantity=quantity, company=company_id, purchase_price=price, purchase_date=self.market_time()))
         # subtract balance
         company = self.db.get(Company, id=company_id)
         company.balance -= value
