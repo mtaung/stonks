@@ -3,7 +3,7 @@ import datetime
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DatabaseInterface
-from db.tables import User, Company, History, Symbol, Stock
+from db.tables import User, Company, CompanyHistory, Symbol, HeldStock
 from .iex import Iex
 from tabulate import tabulate
 import pandas as pd
@@ -76,7 +76,7 @@ class Stonks(commands.Cog):
         else:
             company = Company(owner=uid, name=company_name, balance=10000, active=True)
             self.db.add(company)
-            self.db.add(History(company=company.id, date=datetime.datetime.now()))
+            self.db.add(CompanyHistory(company=company.id, date=datetime.datetime.now()))
             self.db.commit()
             await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
@@ -109,7 +109,7 @@ class Stonks(commands.Cog):
         #await self.market_open_check(ctx)
         await self.stock_symbol_check(ctx, symbol)
         
-        inventory = sum(self.db.get_all(Stock.quantity, company=company.id, symbol=symbol))
+        inventory = sum(self.db.get_all(HeldStock.quantity, company=company.id, symbol=symbol))
         if inventory < quantity:
             await ctx.send(f"{company.name}\n{inventory} {symbol}")
             raise StonksError()
@@ -135,7 +135,7 @@ class Stonks(commands.Cog):
         # CONSIDER: Using an entirely pd.DataFrame based structure rather than converting from list
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-        stock = self.db.get_all(Stock, company=company.id)
+        stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
             inventory.append([s.symbol, s.quantity, s.purchase_value])
@@ -151,7 +151,7 @@ class Stonks(commands.Cog):
         """Simplified display of stocks owned by your current company."""
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-        stock = self.db.get_all(Stock, company=company.id)
+        stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
             inventory.append([s.symbol, s.quantity, s.purchase_value])

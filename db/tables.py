@@ -16,15 +16,15 @@ class Company(Base):
     balance = Column(Float)
     active = Column(Boolean)
 
-class History(Base):
-    __tablename__ = 'history'
+class CompanyHistory(Base):
+    __tablename__ = 'company_history'
     id = Column(Integer, primary_key=True)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
     date = Column(Date)
     value = Column(Float)
 
-class Stock(Base):
-    __tablename__ = 'stocks'
+class HeldStock(Base):
+    __tablename__ = 'held_stock'
     id = Column(Integer, primary_key=True)
     symbol = Column(String(6))
     quantity = Column(Integer)
@@ -32,8 +32,8 @@ class Stock(Base):
     purchase_value = Column(Float)
     purchase_date = Column(Date)
 
-class Close(Base):
-    __tablename__ = 'closes'
+class CloseHistory(Base):
+    __tablename__ = 'close_history'
     id = Column(Integer, primary_key=True)
     symbol = Column(String(6))
     date = Column(Date)
