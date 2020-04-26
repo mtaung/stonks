@@ -29,7 +29,7 @@ class HeldStock(Base):
     symbol = Column(String(6))
     quantity = Column(Integer)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
-    purchase_value = Column(Float)
+    purchase_price = Column(Float)
     purchase_date = Column(Date)
 
 class CloseHistory(Base):
@@ -49,3 +49,8 @@ class Symbol(Base):
 class Transactions(Base):
     __tablename__='transactions'
     symbol = Column(String(6), primary_key=True)
+    company = Column(Integer, ForeignKey('companies.id'), nullable=False)
+    trans_type = Column(String(4))
+    trans_volume = Column(Integer)
+    trans_price = Column(Float)
+    date = Column(Date)
