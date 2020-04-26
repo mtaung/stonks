@@ -6,7 +6,6 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     id = Column(String(20), primary_key = True)
-    credit_score = Column(Float)
 
 class Company(Base):
     __tablename__ = 'companies'
@@ -14,14 +13,9 @@ class Company(Base):
     owner = Column(String(20), ForeignKey('users.id'), nullable=False)
     name = Column(String(30))
     balance = Column(Float)
-    active = Column(Boolean)
-
-class History(Base):
-    __tablename__ = 'history'
-    id = Column(Integer, primary_key=True)
-    company = Column(Integer, ForeignKey('companies.id'), nullable=False)
-    date = Column(Date)
     value = Column(Float)
+    credit_score = Column(Float)
+    active = Column(Boolean)
 
 class Stock(Base):
     __tablename__ = 'stocks'
@@ -49,4 +43,3 @@ class Symbol(Base):
 class Transactions(Base):
     __tablename__='transactions'
     symbol = Column(String(6), primary_key=True)
-        
