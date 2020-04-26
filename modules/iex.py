@@ -11,6 +11,9 @@ EDT = timezone('US/Eastern')
 MARKET_OPEN_TIME = time(4,30)
 MARKET_CLOSE_TIME = time(20)
 
+def _list(list_of_tuples):
+    return [v for (v,) in list_of_tuples]
+
 class Iex:
 
     def __init__(self):
@@ -45,22 +48,18 @@ class Iex:
     def quote(self, symbol):
         return stocks.Stock(symbol, token = self.token).get_quote()
     
-    def splits_test(self, symbol):
-        # generate fake split data for a given symbol, for testing
-        # TODO: remove
-        if symbol == "A":
-            return [{
-                'exDate': "2020-04-26",
-                'toFactor': 1,
-                'fromFactor': 7}]
-        else:
-            return []
+    def get_symbols_in_use(self):
+        unique_symbols = self.db.query(Stock.symbol).distinct().all()
+        return _list(unique_symbols)
+    
+    def get_owners_of(self, symbol):
+        owners = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
+        return _list(owners)
 
     def splits(self):
-        unique_symbols = self.db.query(Stock.symbol).distinct().all()
-        unique_symbols = [v for (v,) in unique_symbols]
+        unique_symbols = self.get_symbols_in_use()
         pending_splits = {}
-
+        # first, find which stocks start trading at split price today
         for symbol in unique_symbols:
             stock = stocks.Stock(symbol, token = self.token)
             splits = stock.get_splits(range='1m')
@@ -71,16 +70,15 @@ class Iex:
                     pending_splits[symbol] = {
                         'from': split['fromFactor'],
                         'to': split['toFactor']}
-                    print(f"{split['exDate']} detected split of {symbol} {split['fromFactor']}-to-{split['toFactor']}")
         
+        # process affected companies
         # modeling split as:
         # selling existing inventory at last known (close) price
         # rebuying inventory at price * ratio and quantity / ratio
         # ratio = fromFactor / toFactor
         # company gets to keep liquidated cash in case of division with remainder
         for symbol in pending_splits:
-            affected_companies = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
-            affected_companies = [v for (v,) in affected_companies]
+            affected_companies = self.get_owners_of(symbol)
 
             fromFactor = pending_splits[symbol]['from']
             toFactor = pending_splits[symbol]['to']
@@ -91,12 +89,47 @@ class Iex:
             for company_id in affected_companies:
                 # sell
                 inventory = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).all()
-                inventory = sum([v for (v,) in inventory])
+                inventory = sum(_list(inventory))
                 self.sell(company_id, symbol, inventory, sell_price)
                 # rebuy
                 new_inventory = inventory * toFactor // fromFactor
                 self.buy(company_id, symbol, new_inventory, rebuy_price)
     
+    def dividends(self):
+        unique_symbols = self.get_symbols_in_use()
+        # dividend rules:
+        # recordDate - the date by which you have to legally own the share to receive dividends
+        # exDate - date set by the stock exchange by which you can buy the stock and still be eligible for dividends, always a few days before recordDate
+        # for all intents and purposes, we can take exDate to be the cutoff point for eligibility
+        # paymentDate - the date when dividend payments are processed
+        # amount - the amount paid per share
+
+        pending_dividends = {}
+        # first, find which stocks must get dividend payments today
+        for symbol in unique_symbols:
+            stock = stocks.Stock(symbol, token = self.token)
+            dividends = stock.get_dividends(range='1m')
+            for event in dividends:
+                if self.market_time().date()  == date.fromisoformat(event['paymentDate']):
+                    pending_dividends[symbol] = {
+                        'amount': event['amount'],
+                        'cutoff': date.fromisoformat(event['exDate'])}
+        
+        # process affected companies
+        for symbol in pending_dividends:
+            affected_companies = self.get_owners_of(symbol)
+
+            for company_id in affected_companies:
+                company = self.db.get(Company, id=company_id)
+
+                eligible_quantity = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).filter(Stock.purchase_date < pending_dividends[symbol]['cutoff'])
+                eligible_quantity = sum(_list(eligible_quantity))
+
+                value = pending_dividends[symbol]['amount'] * eligible_quantity
+                company.balance += value
+                # TODO: log dividend income?
+            self.db.commit()
+
     def buy(self, company_id, symbol, quantity, price):
         """Buy stock, at given price and quantity, without error checking."""
         value = price * quantity
