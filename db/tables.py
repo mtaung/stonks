@@ -21,7 +21,25 @@ class Stock(Base):
     __tablename__ = 'stocks'
     id = Column(Integer, primary_key=True)
     symbol = Column(String(6))
-    quantity = Column(Float)
-    company = Column(String(20), ForeignKey('companies.id'), nullable=False)
+    quantity = Column(Integer)
+    company = Column(Integer, ForeignKey('companies.id'), nullable=False)
     purchase_value = Column(Float)
     purchase_date = Column(Date)
+
+class Close(Base):
+    __tablename__ = 'closes'
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(6))
+    date = Column(Date)
+    close = Column(Float)
+    volume = Column(Integer)
+
+class Symbol(Base):
+    __tablename__= 'symbols'
+    symbol = Column(String(6), primary_key=True)
+    name = Column(String(50))
+    stock_type = Column(String(5))
+
+class Transactions(Base):
+    __tablename__='transactions'
+    symbol = Column(String(6), primary_key=True)
