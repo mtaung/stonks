@@ -3,9 +3,9 @@ import datetime
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DatabaseInterface
-from db.tables import User, Company, History, Symbol, Stock
-from .iex import Iex
+from db.tables import User, Company, CompanyHistory, Symbol, HeldStock
 from utils.scheduler import market_time, market_open_status, next_market_open
+from .iex import Iex, _list
 from tabulate import tabulate
 import pandas as pd
 import numpy as np
@@ -77,7 +77,7 @@ class Stonks(commands.Cog):
         else:
             company = Company(owner=uid, name=company_name, balance=10000, active=True)
             self.db.add(company)
-            self.db.add(History(company=company.id, date=datetime.datetime.now()))
+            self.db.add(CompanyHistory(company=company.id, date=datetime.datetime.now()))
             self.db.commit()
             await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
@@ -110,7 +110,8 @@ class Stonks(commands.Cog):
         #await self.market_open_check(ctx)
         await self.stock_symbol_check(ctx, symbol)
         
-        inventory = sum(self.db.get_all(Stock.quantity, company=company.id, symbol=symbol))
+        inventory = sum(_list(self.db.query(HeldStock.quantity).filter(HeldStock.company == company.id).filter(HeldStock.symbol==symbol).all()))
+        #inventory = sum(self.db.get_all(HeldStock.quantity, company=company.id, symbol=symbol))
         if inventory < quantity:
             await ctx.send(f"{company.name}\n{inventory} {symbol}")
             raise StonksError()
@@ -136,10 +137,10 @@ class Stonks(commands.Cog):
         # CONSIDER: Using an entirely pd.DataFrame based structure rather than converting from list
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-        stock = self.db.get_all(Stock, company=company.id)
+        stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
-            inventory.append([s.symbol, s.quantity, s.purchase_value])
+            inventory.append([s.symbol, s.quantity, s.purchase_price])
         inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
         aggregated = tabulate(inv_df.groupby(['Symbol']).sum().reset_index(), headers=['Symbol', 'Quantity', 'Purchase Value'])
         await ctx.send(f'```{aggregated}```')
@@ -152,10 +153,10 @@ class Stonks(commands.Cog):
         """Simplified display of stocks owned by your current company."""
         author = ctx.author
         company = await self.get_active_company(ctx, author)
-        stock = self.db.get_all(Stock, company=company.id)
+        stock = self.db.get_all(HeldStock, company=company.id)
         inventory = []
         for s in stock:
-            inventory.append([s.symbol, s.quantity, s.purchase_value])
+            inventory.append([s.symbol, s.quantity, s.purchase_price])
         inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
         inv_df['sign'] = np.where(inv_df['Symbol'].str.contains('A'), '+', '-')
         inv_df = inv_df.sort_values(['Symbol'])

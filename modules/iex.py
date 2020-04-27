@@ -4,7 +4,7 @@ from datetime import date
 from utils import config
 from utils.scheduler import market_time
 from db.interface import DatabaseInterface
-from db.tables import Symbol, Close, Stock, Company
+from db.tables import Symbol, CloseHistory, HeldStock, Company, Transactions
 
 def _list(list_of_tuples):
     return [v for (v,) in list_of_tuples]
@@ -22,11 +22,11 @@ class Iex:
         return stocks.Stock(symbol, token = self.token).get_quote()
     
     def get_symbols_in_use(self):
-        unique_symbols = self.db.query(Stock.symbol).distinct().all()
+        unique_symbols = self.db.query(HeldStock.symbol).distinct().all()
         return _list(unique_symbols)
     
     def get_owners_of(self, symbol):
-        owners = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
+        owners = self.db.query(HeldStock.company).filter(HeldStock.symbol == symbol).distinct().all()
         return _list(owners)
 
     def splits(self):
@@ -62,7 +62,7 @@ class Iex:
 
             for company_id in affected_companies:
                 # sell
-                inventory = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).all()
+                inventory = self.db.query(HeldStock.quantity).filter(HeldStock.company == company_id).filter(HeldStock.symbol == symbol).all()
                 inventory = sum(_list(inventory))
                 self.sell(company_id, symbol, inventory, sell_price)
                 # rebuy
@@ -97,29 +97,32 @@ class Iex:
             for company_id in affected_companies:
                 company = self.db.get(Company, id=company_id)
 
-                eligible_quantity = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).filter(Stock.purchase_date < pending_dividends[symbol]['cutoff'])
+                eligible_quantity = self.db.query(HeldStock.quantity).filter(HeldStock.company == company_id).filter(HeldStock.symbol == symbol).filter(HeldStock.purchase_date < pending_dividends[symbol]['cutoff'])
                 eligible_quantity = sum(_list(eligible_quantity))
 
-                value = pending_dividends[symbol]['amount'] * eligible_quantity
+                dividend_amount = pending_dividends[symbol]['amount']
+                value = dividend_amount * eligible_quantity
                 company.balance += value
-                # TODO: log dividend income?
+                # Record dividend income.
+                self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=self.market_time()))
             self.db.commit()
 
     def buy(self, company_id, symbol, quantity, price):
         """Buy stock, at given price and quantity, without error checking."""
         value = price * quantity
         # add stock
-        self.db.add(Stock(symbol=symbol, quantity=quantity, company=company_id, purchase_value=price, purchase_date=market_time()))
+        self.db.add(HeldStock(symbol=symbol, quantity=quantity, company=company_id, purchase_price=price, purchase_date=self.market_time()))
         # subtract balance
         company = self.db.get(Company, id=company_id)
         company.balance -= value
-        # TODO: log buy transaction
+        # record transaction
+        self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
 
     def sell(self, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
         value = price * quantity
-        stocks = self.db.query(Stock).filter(Stock.company==company_id).filter(Stock.symbol==symbol).order_by(Stock.purchase_date.desc())
+        stocks = self.db.query(HeldStock).filter(HeldStock.company==company_id).filter(HeldStock.symbol==symbol).order_by(HeldStock.purchase_date.asc())
         # FIFO subtract stock
         for s in stocks:
             amnt = min(quantity, s.quantity)
@@ -134,7 +137,8 @@ class Iex:
         # add balance
         company = self.db.get(Company, id=company_id)
         company.balance += value
-        # TODO: log sell transaction
+        # Record sell transaction
+        self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
     
     def update_symbols(self):
@@ -169,8 +173,10 @@ class Iex:
         # this fetches the history from iex and puts it in the db
         #close_history = stocks.get_historical_data(symbol, start=start, end=datetime.now(), close_only=True, output_format='json', token=self.token)
         #for close_date in close_history:
-        #    self.db.add(Close(symbol=symbol, date=date.fromisoformat(close_date), close=close_history[close_date]['close'], volume=close_history[close_date]['volume']))
+        #    self.db.add(CloseHistory(symbol=symbol, date=date.fromisoformat(close_date), close=close_history[close_date]['close'], volume=close_history[close_date]['volume']))
         #self.db.commit()
         # this gets the latest date available in the db
         #cached_history = self.db.get_query(Close).filter(Close.symbol == symbol).order_by(Close.date.desc()).first()
+        
+        #cached_history = self.db.get_query(CloseHistory).filter(CloseHistory.symbol == symbol).order_by(CloseHistory.date.desc()).first()
         pass
