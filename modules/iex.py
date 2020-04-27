@@ -1,15 +1,10 @@
 from iexfinance import stocks
 from iexfinance.refdata import get_symbols
-from datetime import datetime, date, time, timedelta, timezone
-from pytz import timezone
-from math import floor
+from datetime import date
 from utils import config
+from utils.scheduler import market_time
 from db.interface import DatabaseInterface
 from db.tables import Symbol, CloseHistory, HeldStock, Company, Transactions
-
-EDT = timezone('US/Eastern')
-MARKET_OPEN_TIME = time(4,30)
-MARKET_CLOSE_TIME = time(20)
 
 def _list(list_of_tuples):
     return [v for (v,) in list_of_tuples]
@@ -18,27 +13,6 @@ class Iex:
     def __init__(self):
         self.token = config.load('iex').get('token')
         self.db = DatabaseInterface('sqlite:///stonks.db')
-    
-    def market_time(self):
-        return datetime.now(tz=EDT)
-    
-    def market_open_status(self):
-        now = self.market_time()
-        return now.weekday() <= 4 and now.time() > MARKET_OPEN_TIME and now.time() < MARKET_CLOSE_TIME
-    
-    def time_to_open(self):
-        now = self.market_time()
-        weekend = min(max(6 - now.weekday(), 0), 2)
-        next_open = datetime(
-            now.year,
-            now.month,
-            now.day + 1 + weekend,
-            MARKET_OPEN_TIME.hour,
-            MARKET_OPEN_TIME.minute,
-            MARKET_OPEN_TIME.second,
-            MARKET_OPEN_TIME.microsecond,
-            tzinfo=now.tzinfo)
-        return next_open - now
 
     def price(self, symbol):
         quote = self.quote(symbol)
@@ -56,6 +30,7 @@ class Iex:
         return _list(owners)
 
     def splits(self):
+        """Check for stock splits and process them."""
         unique_symbols = self.get_symbols_in_use()
         pending_splits = {}
         # first, find which stocks start trading at split price today
@@ -65,7 +40,7 @@ class Iex:
             # TODO: remove line
             #splits = self.splits_test(symbol)
             for split in splits:
-                if self.market_time().date()  == date.fromisoformat(split['exDate']):
+                if market_time().date()  == date.fromisoformat(split['exDate']):
                     pending_splits[symbol] = {
                         'from': split['fromFactor'],
                         'to': split['toFactor']}
@@ -95,6 +70,7 @@ class Iex:
                 self.buy(company_id, symbol, new_inventory, rebuy_price)
     
     def dividends(self):
+        """Check for stock dividends and process them."""
         unique_symbols = self.get_symbols_in_use()
         # dividend rules:
         # recordDate - the date by which you have to legally own the share to receive dividends
@@ -109,7 +85,7 @@ class Iex:
             stock = stocks.Stock(symbol, token = self.token)
             dividends = stock.get_dividends(range='1m')
             for event in dividends:
-                if self.market_time().date()  == date.fromisoformat(event['paymentDate']):
+                if market_time().date()  == date.fromisoformat(event['paymentDate']):
                     pending_dividends[symbol] = {
                         'amount': event['amount'],
                         'cutoff': date.fromisoformat(event['exDate'])}
@@ -166,6 +142,7 @@ class Iex:
         self.db.commit()
     
     def update_symbols(self):
+        """Update internal list of symbols."""
         symbols = get_symbols(token = self.token)
         # handle adding of symbols
         for symbol in symbols:
@@ -177,19 +154,29 @@ class Iex:
         # I think this is a bit more complicated, because what happens if someone owns stock etc
         # leave for later
     
+    def evaluate(self):
+        """Evaluate the net worth all player companies. Accumulate statistical information."""
+        # get the close value of all stock in use
+        symbols = self.get_symbols_in_use()
+        for symbol in symbols:
+            #quote = self.quote(symbol)
+            return
+    
     def history(self, symbol):
         # TODO: account for timezones, account for weekends, then define start and end dates based on that
         # the historical market data on IEX is updated at 4AM ET (eastern time) Tue-Sat
         # must adjust datetime.now() by an appropriate offset so that it equals the previous day when it is < 4AM ET today
         # and further adjust it if it falls onto a weekend, this should affect timedelta as well
-        delta = timedelta(days=3)
-        end = datetime.now()
-        start = end - delta
+        #delta = timedelta(days=3)
+        #end = datetime.now()
+        #start = end - delta
         # this fetches the history from iex and puts it in the db
         #close_history = stocks.get_historical_data(symbol, start=start, end=datetime.now(), close_only=True, output_format='json', token=self.token)
         #for close_date in close_history:
         #    self.db.add(CloseHistory(symbol=symbol, date=date.fromisoformat(close_date), close=close_history[close_date]['close'], volume=close_history[close_date]['volume']))
         #self.db.commit()
-
         # this gets the latest date available in the db
+        #cached_history = self.db.get_query(Close).filter(Close.symbol == symbol).order_by(Close.date.desc()).first()
+        
         #cached_history = self.db.get_query(CloseHistory).filter(CloseHistory.symbol == symbol).order_by(CloseHistory.date.desc()).first()
+        pass
