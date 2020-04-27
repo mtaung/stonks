@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DatabaseInterface
 from db.tables import User, Company, CompanyHistory, Symbol, HeldStock
-from .iex import Iex
+from .iex import Iex, _list
 from tabulate import tabulate
 import pandas as pd
 import numpy as np
@@ -109,7 +109,8 @@ class Stonks(commands.Cog):
         #await self.market_open_check(ctx)
         await self.stock_symbol_check(ctx, symbol)
         
-        inventory = sum(self.db.get_all(HeldStock.quantity, company=company.id, symbol=symbol))
+        inventory = sum(_list(self.db.query(HeldStock.quantity).filter(HeldStock.company == company.id).filter(HeldStock.symbol==symbol).all()))
+        #inventory = sum(self.db.get_all(HeldStock.quantity, company=company.id, symbol=symbol))
         if inventory < quantity:
             await ctx.send(f"{company.name}\n{inventory} {symbol}")
             raise StonksError()

@@ -123,5 +123,6 @@ dmypy.json
 ### ignore bot misc
 *.ini
 *.db
+*.csv
 assets/
 # End of https://www.gitignore.io/api/python,visualstudiocode

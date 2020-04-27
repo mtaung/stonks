@@ -128,7 +128,7 @@ class Iex:
                 value = dividend_amount * eligible_quantity
                 company.balance += value
                 # Record dividend income.
-                #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=self.market_time()))
+                self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=self.market_time()))
             self.db.commit()
 
     def buy(self, company_id, symbol, quantity, price):
@@ -140,7 +140,7 @@ class Iex:
         company = self.db.get(Company, id=company_id)
         company.balance -= value
         # record transaction
-        #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=self.market_time()))
+        self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
 
     def sell(self, company_id, symbol, quantity, price):
@@ -162,7 +162,7 @@ class Iex:
         company = self.db.get(Company, id=company_id)
         company.balance += value
         # Record sell transaction
-        #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=self.market_time()))
+        self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
     
     def update_symbols(self):
