@@ -52,7 +52,8 @@ class Transactions(Base):
     # 1: buy
     # 2: dividends
     __tablename__='transactions'
-    symbol = Column(String(6), primary_key=True)
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(6))
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
     trans_type = Column(Integer)
     trans_volume = Column(Integer)
