@@ -5,6 +5,7 @@ from discord.ext.commands import errors
 from db.interface import DatabaseInterface
 from db.tables import User, Company, History, Symbol, Stock
 from .iex import Iex
+from utils.scheduler import market_time, market_open_status, next_market_open
 from tabulate import tabulate
 import pandas as pd
 import numpy as np
@@ -49,8 +50,8 @@ class Stonks(commands.Cog):
         return company
     
     async def market_open_check(self, ctx):
-        if not self.iex.market_open_status():
-            await ctx.send(f"The market is closed. Please try again in {timedelta_string(self.iex.time_to_open())}.")
+        if not market_open_status():
+            await ctx.send(f"The market is closed. Please try again in {timedelta_string(next_market_open() - market_time())}.")
             raise StonksError()
     
     async def stock_symbol_check(self, ctx, symbol):
