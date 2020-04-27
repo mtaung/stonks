@@ -47,10 +47,14 @@ class Symbol(Base):
     stock_type = Column(String(5))
 
 class Transactions(Base):
+    # Transaction types are classified as the following:
+    # 0: sell
+    # 1: buy
+    # 2: dividends
     __tablename__='transactions'
     symbol = Column(String(6), primary_key=True)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
-    trans_type = Column(String(4))
+    trans_type = Column(Integer)
     trans_volume = Column(Integer)
     trans_price = Column(Float)
     date = Column(Date)
