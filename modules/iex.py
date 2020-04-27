@@ -5,7 +5,7 @@ from pytz import timezone
 from math import floor
 from utils import config
 from db.interface import DatabaseInterface
-from db.tables import Symbol, CloseHistory, HeldStock, Company
+from db.tables import Symbol, CloseHistory, HeldStock, Company, Transactions
 
 EDT = timezone('US/Eastern')
 MARKET_OPEN_TIME = time(4,30)
@@ -124,9 +124,11 @@ class Iex:
                 eligible_quantity = self.db.query(HeldStock.quantity).filter(HeldStock.company == company_id).filter(HeldStock.symbol == symbol).filter(HeldStock.purchase_date < pending_dividends[symbol]['cutoff'])
                 eligible_quantity = sum(_list(eligible_quantity))
 
-                value = pending_dividends[symbol]['amount'] * eligible_quantity
+                dividend_amount = pending_dividends[symbol]['amount']
+                value = dividend_amount * eligible_quantity
                 company.balance += value
-                # TODO: log dividend income?
+                # Record dividend income.
+                #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=self.market_time()))
             self.db.commit()
 
     def buy(self, company_id, symbol, quantity, price):
@@ -137,13 +139,14 @@ class Iex:
         # subtract balance
         company = self.db.get(Company, id=company_id)
         company.balance -= value
-        # TODO: log buy transaction
+        # record transaction
+        #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
 
     def sell(self, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
         value = price * quantity
-        stocks = self.db.query(HeldStock).filter(HeldStock.company==company_id).filter(HeldStock.symbol==symbol).order_by(HeldStock.purchase_date.desc())
+        stocks = self.db.query(HeldStock).filter(HeldStock.company==company_id).filter(HeldStock.symbol==symbol).order_by(HeldStock.purchase_date.asc())
         # FIFO subtract stock
         for s in stocks:
             amnt = min(quantity, s.quantity)
@@ -158,7 +161,8 @@ class Iex:
         # add balance
         company = self.db.get(Company, id=company_id)
         company.balance += value
-        # TODO: log sell transaction
+        # Record sell transaction
+        #self.db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=self.market_time()))
         self.db.commit()
     
     def update_symbols(self):
