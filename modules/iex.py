@@ -34,6 +34,18 @@ class Iex:
     def get_held_stock_quantity(self, db, company, symbol):
         quantity = db.query(HeldStock.quantity).filter(HeldStock.company == company).filter(HeldStock.symbol == symbol).all()
         return sum(_list(quantity))
+    
+    def get_latest_close(self, db, symbol):
+        quote = self.quote(symbol)
+        close = quote['close']
+        volume = quote['volume']
+        if not quote['close'] or not quote['volume']:
+            close = quote['previousClose']
+            volume = quote['previousVolume']
+            close_row = db.add(CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume))
+            return close_row
+        close_row = db.add(CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume))
+        return close_row
 
     def splits(self):
         """Check for stock splits and process them."""
@@ -163,8 +175,12 @@ class Iex:
             today = market_time().date()
             for symbol in symbols:
                 quote = self.quote(symbol)
-                print(quote['previousClose'], quote['previousVolume'])
-                db.add(CloseHistory(symbol=symbol, date=today, close=quote['previousClose'], volume=quote['previousVolume']))
+                close = quote['close']
+                volume = quote['volume']
+                if not quote['close'] or not quote['volume']:
+                    close = quote['previousClose']
+                    volume = quote['previousVolume']
+                db.add(CloseHistory(symbol=symbol, date=today, close=close, volume=volume))
             companies = db.query(Company).filter(Company.active == True).all()
             # evaluate the net worth of every company
             for company in companies:

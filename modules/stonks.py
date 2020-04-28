@@ -61,7 +61,8 @@ class Stonks(commands.Cog):
     async def get_latest_close(self, ctx, db, symbol):
         close_row = db.query(CloseHistory).filter(CloseHistory.symbol == symbol).order_by(CloseHistory.date.desc()).first()
         if not close_row:
-            raise StonksError()
+            close_row = self.iex.get_latest_close(db, symbol)
+            return close_row
         return close_row
     
     @commands.command()
@@ -136,9 +137,9 @@ class Stonks(commands.Cog):
             delta = history[0].value - history[1].value if len(history) == 2 else 0
             percent = delta * 100 / history[1].value if len(history) == 2 else 0
             symbol = '⮝' if delta >= 0 else '⮟'
-            embed = discord.Embed(title=f'Company: {company.name}', inline=True)
+            embed = discord.Embed(title=f'Company: {company.name}', description=f'{symbol}{round(percent, 2)}%', inline=True, )
             embed.add_field(name='Cash Assets:', value=f'{round(company.balance, 2)} USD')
-            embed.add_field(name='Net worth:', value=f'{round(net_worth, 2)} USD {symbol}{round(percent, 2)}%')
+            embed.add_field(name='Net worth:', value=f'{round(net_worth, 2)} USD')
             await ctx.send(embed=embed)
     
     @commands.command()
