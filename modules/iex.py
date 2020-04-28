@@ -4,7 +4,7 @@ from datetime import date
 from utils import config
 from utils.scheduler import market_time
 from db.interface import DB, _list
-from db.tables import Symbol, CloseHistory, HeldStock, Company, Transactions
+from db.tables import Symbol, CloseHistory, CompanyHistory, HeldStock, Company, Transactions
 
 class Iex:
     def __init__(self):
@@ -49,8 +49,6 @@ class Iex:
             for symbol in unique_symbols:
                 stock = stocks.Stock(symbol, token = self.token)
                 splits = stock.get_splits(range='1m')
-                # TODO: remove line
-                #splits = self.splits_test(symbol)
                 for split in splits:
                     if market_time().date()  == date.fromisoformat(split['exDate']):
                         pending_splits[symbol] = {
@@ -162,25 +160,16 @@ class Iex:
         with DB() as db:
             # get the close value of all stock in use
             symbols = self.get_symbols_in_use(db)
+            today = market_time().date()
             for symbol in symbols:
-                #quote = self.quote(symbol)
-                return
-    
-    def history(self, symbol):
-        # TODO: account for timezones, account for weekends, then define start and end dates based on that
-        # the historical market data on IEX is updated at 4AM ET (eastern time) Tue-Sat
-        # must adjust datetime.now() by an appropriate offset so that it equals the previous day when it is < 4AM ET today
-        # and further adjust it if it falls onto a weekend, this should affect timedelta as well
-        #delta = timedelta(days=3)
-        #end = datetime.now()
-        #start = end - delta
-        # this fetches the history from iex and puts it in the db
-        #close_history = stocks.get_historical_data(symbol, start=start, end=datetime.now(), close_only=True, output_format='json', token=self.token)
-        #for close_date in close_history:
-        #    self.db.add(CloseHistory(symbol=symbol, date=date.fromisoformat(close_date), close=close_history[close_date]['close'], volume=close_history[close_date]['volume']))
-        #self.db.commit()
-        # this gets the latest date available in the db
-        #cached_history = self.db.get_query(Close).filter(Close.symbol == symbol).order_by(Close.date.desc()).first()
-        
-        #cached_history = self.db.get_query(CloseHistory).filter(CloseHistory.symbol == symbol).order_by(CloseHistory.date.desc()).first()
-        pass
+                quote = self.quote(symbol)
+                db.add(CloseHistory(symbol=symbol, date=today, close=quote['close'], volume=quote['volume']))
+            companies = db.query(Company).filter(Company.active == True).all()
+            # evaluate the net worth of every company
+            for company in companies:
+                inventory = self.get_held_stocks(db, company.id)
+                value = company.balance
+                for stock in inventory:
+                    ch = db.query(CloseHistory).filter(CloseHistory.symbol == stock.symbol).filter(CloseHistory.date == today).first()
+                    value += ch.close * stock.quantity
+                db.add(CompanyHistory(company=company.id, date=today, value=value))

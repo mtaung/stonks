@@ -1,5 +1,5 @@
 import discord
-import datetime
+from datetime import timedelta
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DB
@@ -54,7 +54,7 @@ class Stonks(commands.Cog):
             raise StonksError()
     
     async def stock_symbol_check(self, ctx, db, symbol):
-        if not db.query(Symbol).filter(Symbol.symbol == symbol):
+        if not db.query(Symbol).filter(Symbol.symbol == symbol).first():
             await ctx.send(f"{symbol} is not a valid stock symbol.")
             raise StonksError()
     
@@ -77,7 +77,7 @@ class Stonks(commands.Cog):
                 company = Company(owner=uid, name=company_name, balance=10000, active=True)
                 db.add(company)
                 db.flush()
-                db.add(CompanyHistory(company=company.id, date=datetime.datetime.now()))
+                db.add(CompanyHistory(company=company.id, date=market_time() - timedelta(days=1), value=10000))
                 await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
     @commands.command()
@@ -87,8 +87,7 @@ class Stonks(commands.Cog):
         author = ctx.author
         with DB() as db:
             company = await self.get_active_company(ctx, db, author)
-            #TODO: uncomment
-            #await self.market_open_check(ctx)
+            await self.market_open_check(ctx)
             await self.stock_symbol_check(ctx, db, symbol)
             
             price = self.iex.price(symbol)
@@ -98,7 +97,7 @@ class Stonks(commands.Cog):
                 raise StonksError()
 
             self.iex.buy(db, company.id, symbol, quantity, price)
-            await ctx.send(f"{company.name} BUYS {quantity} {symbol} for {cost} USD")
+            await ctx.send(f"``⇉{quantity} {symbol}@{cost} {company.name}``")
 
     @commands.command()
     async def sell(self, ctx, quantity: int, symbol: str):
@@ -107,29 +106,33 @@ class Stonks(commands.Cog):
         author = ctx.author
         with DB() as db:
             company = await self.get_active_company(ctx, db, author)
-            # TODO: uncomment
-            #await self.market_open_check(ctx)
+            await self.market_open_check(ctx)
             await self.stock_symbol_check(ctx, db, symbol)
             
             inventory = self.iex.get_held_stock_quantity(db, company.id, symbol)
             if inventory < quantity:
-                await ctx.send(f"{company.name}\n{inventory} {symbol}")
+                await ctx.send(f"``{company.name}\n{inventory} {symbol}``")
                 raise StonksError()
 
             price = self.iex.price(symbol)
             value = price * quantity
             self.iex.sell(db, company.id, symbol, quantity, price)
-            await ctx.send(f"{company.name} SELLS {quantity} {symbol} for {value} USD")
+            await ctx.send(f"``⇇{quantity} {symbol}@{value} {company.name}``")
 
     @commands.command()
     async def balance(self, ctx):
-        # TODO: Expand to include net value and other company information.
         """Check balance on your active company."""
         author = ctx.author
         with DB() as db:
             company = await self.get_active_company(ctx, db, author)
+            history = db.query(CompanyHistory).filter(CompanyHistory.company == company.id).order_by(CompanyHistory.date.desc()).limit(2).all()
+            net_worth = history[0].value
+            delta = history[0].value - history[1].value if len(history) == 2 else 0
+            percent = delta * 100 / history[1].value if len(history) == 2 else 0
+            symbol = '⮝' if delta >= 0 else '⮟'
             embed = discord.Embed(title=f'Company: {company.name}', inline=True)
             embed.add_field(name='Cash Assets:', value=f'{round(company.balance, 2)} USD')
+            embed.add_field(name='Net worth:', value=f'{round(net_worth, 2)} USD {symbol}{round(percent, 2)}%')
             await ctx.send(embed=embed)
     
     @commands.command()
