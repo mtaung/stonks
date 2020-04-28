@@ -42,9 +42,8 @@ class Iex:
         if not quote['close'] or not quote['volume']:
             close = quote['previousClose']
             volume = quote['previousVolume']
-            close_row = db.add(CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume))
-            return close_row
-        close_row = db.add(CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume))
+        close_row = CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume)
+        db.add(close_row)
         return close_row
 
     def splits(self):
