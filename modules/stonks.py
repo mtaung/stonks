@@ -3,7 +3,7 @@ from datetime import timedelta
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DB
-from db.tables import User, Company, CompanyHistory, Symbol, HeldStock
+from db.tables import User, Company, CompanyHistory, Symbol, HeldStock, CloseHistory
 from utils.scheduler import market_time, market_open_status, next_market_open
 from .iex import Iex
 from tabulate import tabulate
@@ -57,6 +57,12 @@ class Stonks(commands.Cog):
         if not db.query(Symbol).filter(Symbol.symbol == symbol).first():
             await ctx.send(f"{symbol} is not a valid stock symbol.")
             raise StonksError()
+    
+    async def get_latest_close(self, ctx, db, symbol):
+        close_row = db.query(CloseHistory).filter(CloseHistory.symbol == symbol).order_by(CloseHistory.date.desc()).first()
+        if not close_row:
+            raise StonksError()
+        return close_row
     
     @commands.command()
     async def register(self, ctx, company_name: str):
@@ -145,16 +151,16 @@ class Stonks(commands.Cog):
             stock = self.iex.get_held_stocks(db, company.id)
             inventory = []
             for s in stock:
-                inventory.append([s.symbol, s.quantity, s.purchase_price * s.quantity])
-            inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
-            aggregated = tabulate(inv_df.groupby(['Symbol']).sum().reset_index(), headers=['Symbol', 'Quantity', 'Purchase Value'])
+                close = await self.get_latest_close(ctx, db, s.symbol)
+                inventory.append([s.symbol, s.quantity, close.close * s.quantity])
+            inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Value'])
+            aggregated = tabulate(inv_df.groupby(['Symbol']).sum().reset_index(), headers=['Symbol', 'Quantity', 'Value'])
             await ctx.send(f'```{aggregated}```')
 
     @commands.command()
     async def breakdown(self, ctx):
-        # TODO: At the problem, this is assigning +/- based on testing parameters
-        #       In production, we want to assign this based on current price of each stock. 
-        #       This can potentially expend a lot of API calls, so we need to consider how to handle that.
+        # TODO: Asssess whether this can be cleaned up. 
+        #       As it stands, very similar to inv()
         """Simplified display of stocks owned by your current company."""
         author = ctx.author
         with DB() as db:
@@ -162,12 +168,13 @@ class Stonks(commands.Cog):
             stock = self.iex.get_held_stocks(db, company.id)
             inventory = []
             for s in stock:
-                inventory.append([s.symbol, s.quantity, s.purchase_price * s.quantity])
-            inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Value'])
-            inv_df['sign'] = np.where(inv_df['Symbol'].str.contains('A'), '+', '-')
+                close = await self.get_latest_close(ctx, db, s.symbol)
+                inventory.append([s.symbol, s.quantity, s.purchase_price, close.close, s.quantity*s.purchase_price - s.quantity*close.close]) 
+            inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
+            inv_df['sign'] = np.where(inv_df['Current Value']>=0, '+', '-')
             inv_df = inv_df.sort_values(['Symbol'])
-            inv_df = inv_df[['sign', 'Symbol', 'Quantity', 'Purchase Value']]
-            aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', 'Symbol', 'Quantity', 'Purchase Value'])
+            inv_df = inv_df[['sign', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value']]
+            aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             await ctx.send(f'```diff\n{aggregated}```')
 
     @commands.Cog.listener()
