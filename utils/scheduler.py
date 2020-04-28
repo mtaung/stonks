@@ -19,7 +19,7 @@ def market_open_status():
 
 def next_daily_event(event_time, workday=True, tz=EDT):
     now = datetime.now(tz=tz)
-    weekend = min(max(6 - now.weekday(), 0), 2) if workday else 0
+    weekend = min(6 - now.weekday(), 2) if workday and now.weekday() in (4, 5) else 0
     delta = timedelta(0) if now.time() < event_time else timedelta(days=1 + weekend)
     return datetime.combine(now.date() + delta, event_time, tzinfo=now.tzinfo)
 
