@@ -1,44 +1,14 @@
 from iexfinance import stocks
 from iexfinance.refdata import get_symbols
-from datetime import datetime, date, time, timedelta, timezone
-from pytz import timezone
-from math import floor
+from datetime import date
 from utils import config
-from db.interface import DatabaseInterface
-from db.tables import Symbol, Close, Stock, Company
-
-EDT = timezone('US/Eastern')
-MARKET_OPEN_TIME = time(4,30)
-MARKET_CLOSE_TIME = time(20)
-
-def _list(list_of_tuples):
-    return [v for (v,) in list_of_tuples]
+from utils.scheduler import market_time
+from db.interface import DB, _list
+from db.tables import Symbol, CloseHistory, CompanyHistory, HeldStock, Company, Transactions
 
 class Iex:
     def __init__(self):
         self.token = config.load('iex').get('token')
-        self.db = DatabaseInterface('sqlite:///stonks.db')
-    
-    def market_time(self):
-        return datetime.now(tz=EDT)
-    
-    def market_open_status(self):
-        now = self.market_time()
-        return now.weekday() <= 4 and now.time() > MARKET_OPEN_TIME and now.time() < MARKET_CLOSE_TIME
-    
-    def time_to_open(self):
-        now = self.market_time()
-        weekend = min(max(6 - now.weekday(), 0), 2)
-        next_open = datetime(
-            now.year,
-            now.month,
-            now.day + 1 + weekend,
-            MARKET_OPEN_TIME.hour,
-            MARKET_OPEN_TIME.minute,
-            MARKET_OPEN_TIME.second,
-            MARKET_OPEN_TIME.microsecond,
-            tzinfo=now.tzinfo)
-        return next_open - now
 
     def price(self, symbol):
         quote = self.quote(symbol)
@@ -47,103 +17,114 @@ class Iex:
     def quote(self, symbol):
         return stocks.Stock(symbol, token = self.token).get_quote()
     
-    def get_symbols_in_use(self):
-        unique_symbols = self.db.query(Stock.symbol).distinct().all()
+    def get_symbols_in_use(self, db):
+        unique_symbols = db.query(HeldStock.symbol).distinct().all()
         return _list(unique_symbols)
     
-    def get_owners_of(self, symbol):
-        owners = self.db.query(Stock.company).filter(Stock.symbol == symbol).distinct().all()
+    def get_company(self, db, company_id):
+        return db.query(Company).filter(Company.id == company_id).first()
+    
+    def get_owners_of(self, db, symbol):
+        owners = db.query(HeldStock.company).filter(HeldStock.symbol == symbol).distinct().all()
         return _list(owners)
+    
+    def get_held_stocks(self, db, company):
+        return db.query(HeldStock).filter(HeldStock.company == company).all()
+    
+    def get_held_stock_quantity(self, db, company, symbol):
+        quantity = db.query(HeldStock.quantity).filter(HeldStock.company == company).filter(HeldStock.symbol == symbol).all()
+        return sum(_list(quantity))
 
     def splits(self):
-        unique_symbols = self.get_symbols_in_use()
-        pending_splits = {}
-        # first, find which stocks start trading at split price today
-        for symbol in unique_symbols:
-            stock = stocks.Stock(symbol, token = self.token)
-            splits = stock.get_splits(range='1m')
-            # TODO: remove line
-            #splits = self.splits_test(symbol)
-            for split in splits:
-                if self.market_time().date()  == date.fromisoformat(split['exDate']):
-                    pending_splits[symbol] = {
-                        'from': split['fromFactor'],
-                        'to': split['toFactor']}
-        
-        # process affected companies
+        """Check for stock splits and process them."""
         # modeling split as:
         # selling existing inventory at last known (close) price
         # rebuying inventory at price * ratio and quantity / ratio
         # ratio = fromFactor / toFactor
         # company gets to keep liquidated cash in case of division with remainder
-        for symbol in pending_splits:
-            affected_companies = self.get_owners_of(symbol)
+        with DB() as db:
+            unique_symbols = self.get_symbols_in_use(db)
+            pending_splits = {}
+            # first, find which stocks start trading at split price today
+            for symbol in unique_symbols:
+                stock = stocks.Stock(symbol, token = self.token)
+                splits = stock.get_splits(range='1m')
+                for split in splits:
+                    if market_time().date()  == date.fromisoformat(split['exDate']):
+                        pending_splits[symbol] = {
+                            'from': split['fromFactor'],
+                            'to': split['toFactor']}
+            
+            # process affected companies
+            for symbol in pending_splits:
+                affected_companies = self.get_owners_of(db, symbol)
 
-            fromFactor = pending_splits[symbol]['from']
-            toFactor = pending_splits[symbol]['to']
+                fromFactor = pending_splits[symbol]['from']
+                toFactor = pending_splits[symbol]['to']
 
-            sell_price = self.quote(symbol)['close']
-            rebuy_price = sell_price * fromFactor / toFactor
+                sell_price = self.quote(symbol)['close']
+                rebuy_price = sell_price * fromFactor / toFactor
 
-            for company_id in affected_companies:
-                # sell
-                inventory = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).all()
-                inventory = sum(_list(inventory))
-                self.sell(company_id, symbol, inventory, sell_price)
-                # rebuy
-                new_inventory = inventory * toFactor // fromFactor
-                self.buy(company_id, symbol, new_inventory, rebuy_price)
+                for company_id in affected_companies:
+                    # sell
+                    inventory = self.get_held_stock_quantity(db, company_id, symbol)
+                    self.sell(db, company_id, symbol, inventory, sell_price)
+                    # rebuy
+                    new_inventory = inventory * toFactor // fromFactor
+                    self.buy(db, company_id, symbol, new_inventory, rebuy_price)
     
     def dividends(self):
-        unique_symbols = self.get_symbols_in_use()
+        """Check for stock dividends and process them."""
         # dividend rules:
         # recordDate - the date by which you have to legally own the share to receive dividends
         # exDate - date set by the stock exchange by which you can buy the stock and still be eligible for dividends, always a few days before recordDate
         # for all intents and purposes, we can take exDate to be the cutoff point for eligibility
         # paymentDate - the date when dividend payments are processed
         # amount - the amount paid per share
+        with DB() as db:
+            unique_symbols = self.get_symbols_in_use(db)
+            pending_dividends = {}
+            # first, find which stocks must get dividend payments today
+            for symbol in unique_symbols:
+                stock = stocks.Stock(symbol, token = self.token)
+                dividends = stock.get_dividends(range='1m')
+                for event in dividends:
+                    if market_time().date()  == date.fromisoformat(event['paymentDate']):
+                        pending_dividends[symbol] = {
+                            'amount': event['amount'],
+                            'cutoff': date.fromisoformat(event['exDate'])}
+            
+            # process affected companies
+            for symbol in pending_dividends:
+                affected_companies = self.get_owners_of(db, symbol)
 
-        pending_dividends = {}
-        # first, find which stocks must get dividend payments today
-        for symbol in unique_symbols:
-            stock = stocks.Stock(symbol, token = self.token)
-            dividends = stock.get_dividends(range='1m')
-            for event in dividends:
-                if self.market_time().date()  == date.fromisoformat(event['paymentDate']):
-                    pending_dividends[symbol] = {
-                        'amount': event['amount'],
-                        'cutoff': date.fromisoformat(event['exDate'])}
-        
-        # process affected companies
-        for symbol in pending_dividends:
-            affected_companies = self.get_owners_of(symbol)
+                for company_id in affected_companies:
+                    company = self.get_company(db, company_id)
 
-            for company_id in affected_companies:
-                company = self.db.get(Company, id=company_id)
+                    eligible_quantity = db.query(HeldStock.quantity).filter(HeldStock.company == company_id).filter(HeldStock.symbol == symbol).filter(HeldStock.purchase_date < pending_dividends[symbol]['cutoff']).all()
+                    eligible_quantity = sum(_list(eligible_quantity))
 
-                eligible_quantity = self.db.query(Stock.quantity).filter(Stock.company == company_id).filter(Stock.symbol == symbol).filter(Stock.purchase_date < pending_dividends[symbol]['cutoff'])
-                eligible_quantity = sum(_list(eligible_quantity))
+                    dividend_amount = pending_dividends[symbol]['amount']
+                    value = dividend_amount * eligible_quantity
+                    company.balance += value
+                    # Record dividend income.
+                    db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=market_time()))
 
-                value = pending_dividends[symbol]['amount'] * eligible_quantity
-                company.balance += value
-                # TODO: log dividend income?
-            self.db.commit()
-
-    def buy(self, company_id, symbol, quantity, price):
+    def buy(self, db, company_id, symbol, quantity, price):
         """Buy stock, at given price and quantity, without error checking."""
         value = price * quantity
         # add stock
-        self.db.add(Stock(symbol=symbol, quantity=quantity, company=company_id, purchase_value=price, purchase_date=self.market_time()))
+        db.add(HeldStock(symbol=symbol, quantity=quantity, company=company_id, purchase_price=price, purchase_date=market_time()))
         # subtract balance
-        company = self.db.get(Company, id=company_id)
+        company = self.get_company(db, company_id)
         company.balance -= value
-        # TODO: log buy transaction
-        self.db.commit()
+        # record transaction
+        db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=market_time()))
 
-    def sell(self, company_id, symbol, quantity, price):
+    def sell(self, db, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
         value = price * quantity
-        stocks = self.db.query(Stock).filter(Stock.company==company_id).filter(Stock.symbol==symbol).order_by(Stock.purchase_date.desc())
+        stocks = db.query(HeldStock).filter(HeldStock.company==company_id).filter(HeldStock.symbol==symbol).order_by(HeldStock.purchase_date.asc())
         # FIFO subtract stock
         for s in stocks:
             amnt = min(quantity, s.quantity)
@@ -154,38 +135,41 @@ class Iex:
         # delete 0 quant rows
         for s in stocks:
             if s.quantity == 0:
-                self.db.delete(s)
+                db.delete(s)
         # add balance
-        company = self.db.get(Company, id=company_id)
+        company = self.get_company(db, company_id)
         company.balance += value
-        # TODO: log sell transaction
-        self.db.commit()
+        # Record sell transaction
+        db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=market_time()))
     
     def update_symbols(self):
+        """Update internal list of symbols."""
         symbols = get_symbols(token = self.token)
         # handle adding of symbols
-        for symbol in symbols:
-            sym = symbol['symbol']
-            if not self.db.get(Symbol, symbol=sym):
-                self.db.add(Symbol(symbol=sym, name=symbol['name'], stock_type=symbol['type']))
-        self.db.commit()
+        with DB() as db:
+            for symbol in symbols:
+                sym = symbol['symbol']
+                if not db.query(Symbol).filter(Symbol.symbol==sym).first():
+                    db.add(Symbol(symbol=sym, name=symbol['name'], stock_type=symbol['type']))
         # handle removal of symbols?
         # I think this is a bit more complicated, because what happens if someone owns stock etc
         # leave for later
     
-    def history(self, symbol):
-        # TODO: account for timezones, account for weekends, then define start and end dates based on that
-        # the historical market data on IEX is updated at 4AM ET (eastern time) Tue-Sat
-        # must adjust datetime.now() by an appropriate offset so that it equals the previous day when it is < 4AM ET today
-        # and further adjust it if it falls onto a weekend, this should affect timedelta as well
-        delta = timedelta(days=3)
-        end = datetime.now()
-        start = end - delta
-        # this fetches the history from iex and puts it in the db
-        #close_history = stocks.get_historical_data(symbol, start=start, end=datetime.now(), close_only=True, output_format='json', token=self.token)
-        #for close_date in close_history:
-        #    self.db.add(Close(symbol=symbol, date=date.fromisoformat(close_date), close=close_history[close_date]['close'], volume=close_history[close_date]['volume']))
-        #self.db.commit()
-
-        # this gets the latest date available in the db
-        #cached_history = self.db.get_query(Close).filter(Close.symbol == symbol).order_by(Close.date.desc()).first()
+    def evaluate(self):
+        """Evaluate the net worth all player companies. Accumulate statistical information."""
+        with DB() as db:
+            # get the close value of all stock in use
+            symbols = self.get_symbols_in_use(db)
+            today = market_time().date()
+            for symbol in symbols:
+                quote = self.quote(symbol)
+                db.add(CloseHistory(symbol=symbol, date=today, close=quote['close'], volume=quote['volume']))
+            companies = db.query(Company).filter(Company.active == True).all()
+            # evaluate the net worth of every company
+            for company in companies:
+                inventory = self.get_held_stocks(db, company.id)
+                value = company.balance
+                for stock in inventory:
+                    ch = db.query(CloseHistory).filter(CloseHistory.symbol == stock.symbol).filter(CloseHistory.date == today).first()
+                    value += ch.close * stock.quantity
+                db.add(CompanyHistory(company=company.id, date=today, value=value))
