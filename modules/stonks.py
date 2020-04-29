@@ -137,7 +137,7 @@ class Stonks(commands.Cog):
             delta = history[0].value - history[1].value if len(history) == 2 else 0
             percent = delta * 100 / history[1].value if len(history) == 2 else 0
             symbol = '⮝' if delta >= 0 else '⮟'
-            embed = discord.Embed(title=f'Company: {company.name}', description=f'{symbol}{round(percent, 2)}%', inline=True, )
+            embed = discord.Embed(title=f'{company.name}', description=f'{symbol}{round(percent, 2)}%', inline=True)
             embed.add_field(name='Cash Assets:', value=f'{round(company.balance, 2)} USD')
             embed.add_field(name='Net worth:', value=f'{round(net_worth, 2)} USD')
             await ctx.send(embed=embed)

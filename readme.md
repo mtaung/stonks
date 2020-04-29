@@ -13,8 +13,9 @@ This bot was built with discord-py and the iexfinance API.
 - numpy 
 - pandas
 - sqlalchemy
+- tabulate
 
 ## How to run:
 
 
-This bot is self hosted. To start the bot, make sure to run `initialise.py`. 
+This bot is self hosted. Before you start the bot, make sure to run `initialise.py`. 
