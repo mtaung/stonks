@@ -167,7 +167,7 @@ class Stonks(commands.Cog):
     async def daily(self, ctx):
         # TODO: Asssess whether this can be cleaned up. 
         #       As it stands, very similar to inv()
-        """Simplified display of stocks owned by your current company."""
+        """Detailed breakdown of stocks owned by your current company."""
         author = ctx.author
         with DB() as db:
             company = await self.get_active_company(ctx, db, author)
@@ -184,6 +184,21 @@ class Stonks(commands.Cog):
             inv_df = inv_df[['sign', '%', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value']]
             aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', '%', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             await ctx.send(f'```diff\n{aggregated}```')
+    
+    @commands.command()
+    async def score(self, ctx):
+        """Show the net worth of all active player companies."""
+        with DB() as db:
+            companies = db.query(Company).filter(Company.active == True).all()
+            scores = []
+            for company in companies:
+                history = db.query(CompanyHistory).filter(CompanyHistory.company == company.id).order_by(CompanyHistory.date.desc()).first()
+                scores.append([company.name, round(history.value, 2)])
+            headers = ['Company', 'Net Worth']
+            score_df = pd.DataFrame(scores, columns=headers)
+            score_df = score_df.sort_values(['Net Worth'])
+            aggregated = tabulate(score_df.values.tolist(), headers=headers)
+            await ctx.send(f"```{aggregated}```")
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
