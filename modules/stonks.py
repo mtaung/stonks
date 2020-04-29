@@ -66,6 +66,12 @@ class Stonks(commands.Cog):
         return close_row
     
     @commands.command()
+    async def time(self, ctx):
+        """Return the current time 
+        time = market_time()
+        await ctx.send(f'It is currently {time} EDT for the market.')
+    
+    @commands.command()
     async def register(self, ctx, company_name: str):
         """Register a company under your username, joining the game.\nUse double quotation marks for names with multiple words or whitespace characters."""
         author = ctx.author
