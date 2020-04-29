@@ -31,7 +31,7 @@ def timedelta_string(delta):
 class StonksError(errors.CommandError):
     pass
 
-# TODO: pretty, concise printouts for frequent operations like sell/buy
+# TODO: 
 # limit company name length in printout
 # perhaps replace words like buy/sell with symbols?
 
@@ -67,7 +67,7 @@ class Stonks(commands.Cog):
     
     @commands.command()
     async def register(self, ctx, company_name: str):
-        """Register a company under your username, joining the game.\nUse quotation marks for names with multiple words or whitespace characters."""
+        """Register a company under your username, joining the game.\nUse double quotation marks for names with multiple words or whitespace characters."""
         author = ctx.author
         uid = author.id
         uname = name(author)
@@ -104,7 +104,7 @@ class Stonks(commands.Cog):
                 raise StonksError()
 
             self.iex.buy(db, company.id, symbol, quantity, price)
-            await ctx.send(f"``⇉{quantity} {symbol}@{cost} {company.name}``")
+            await ctx.send(f"``{company.name} ⯮ {quantity} {symbol} @ {cost}``")
 
     @commands.command()
     async def sell(self, ctx, quantity: int, symbol: str):
@@ -124,7 +124,7 @@ class Stonks(commands.Cog):
             price = self.iex.price(symbol)
             value = price * quantity
             self.iex.sell(db, company.id, symbol, quantity, price)
-            await ctx.send(f"``⇇{quantity} {symbol}@{value} {company.name}``")
+            await ctx.send(f"``{company.name} ⯬ {quantity} {symbol} @ {value}``")
 
     @commands.command()
     async def balance(self, ctx):
@@ -145,7 +145,6 @@ class Stonks(commands.Cog):
     @commands.command()
     async def inv(self, ctx):
         """Simplified display of stocks owned by your current company."""
-        # CONSIDER: Using an entirely pd.DataFrame based structure rather than converting from list
         author = ctx.author
         with DB() as db:
             company = await self.get_active_company(ctx, db, author)
@@ -159,7 +158,7 @@ class Stonks(commands.Cog):
             await ctx.send(f'```{aggregated}```')
 
     @commands.command()
-    async def breakdown(self, ctx):
+    async def daily(self, ctx):
         # TODO: Asssess whether this can be cleaned up. 
         #       As it stands, very similar to inv()
         """Simplified display of stocks owned by your current company."""
@@ -173,9 +172,11 @@ class Stonks(commands.Cog):
                 inventory.append([s.symbol, s.quantity, s.purchase_price, close.close, s.quantity*s.purchase_price - s.quantity*close.close]) 
             inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             inv_df['sign'] = np.where(inv_df['Current Value']>=0, '+', '-')
+            inv_df['%'] = abs(((inv_df['Purchase Price'] - inv_df['Close'])  / inv_df['Purchase Price']) * 100)
+            inv_df['%'] = inv_df['%'].round(1)
             inv_df = inv_df.sort_values(['Symbol'])
-            inv_df = inv_df[['sign', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value']]
-            aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
+            inv_df = inv_df[['sign', '%', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value']]
+            aggregated = tabulate(inv_df.values.tolist(), headers=['Δ', '%', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             await ctx.send(f'```diff\n{aggregated}```')
 
     @commands.Cog.listener()
