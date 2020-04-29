@@ -67,7 +67,7 @@ class Stonks(commands.Cog):
     
     @commands.command()
     async def time(self, ctx):
-        """Return the current time 
+        """Return the current time for the game."""
         time = market_time()
         await ctx.send(f'It is currently {time} EDT for the market.')
     
