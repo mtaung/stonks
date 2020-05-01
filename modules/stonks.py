@@ -3,7 +3,7 @@ from datetime import timedelta
 from discord.ext import commands
 from discord.ext.commands import errors
 from db.interface import DB
-from db.tables import User, Company, CompanyHistory, Symbol, HeldStock, CloseHistory
+from db.tables import User, Company, CompanyHistory, Symbol, CloseHistory
 from utils.scheduler import market_time, market_open_status, next_market_open
 from .iex import Iex
 from tabulate import tabulate
@@ -90,7 +90,7 @@ class Stonks(commands.Cog):
                 company = Company(owner=uid, name=company_name, balance=10000, active=True)
                 db.add(company)
                 db.flush()
-                db.add(CompanyHistory(company=company.id, date=market_time() - timedelta(days=1), value=10000))
+                db.add(CompanyHistory(company=company.id, date=market_time(), value=10000))
                 await ctx.send(f'Your application to register {company_name} has been accepted. Happy trading!')
     
     @commands.command()

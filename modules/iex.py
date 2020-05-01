@@ -1,10 +1,10 @@
 from iexfinance import stocks
 from iexfinance.refdata import get_symbols
-from datetime import date
+from datetime import date, time, datetime
 from utils import config
 from utils.scheduler import market_time
 from db.interface import DB, _list
-from db.tables import Symbol, CloseHistory, CompanyHistory, HeldStock, Company, Transactions
+from db.tables import Symbol, CloseHistory, CompanyHistory, HeldStock, Company, Transaction
 
 class Iex:
     def __init__(self):
@@ -42,7 +42,7 @@ class Iex:
         if not quote['close'] or not quote['volume']:
             close = quote['previousClose']
             volume = quote['previousVolume']
-        close_row = CloseHistory(symbol=symbol, date=market_time().date(), close=close, volume=volume)
+        close_row = CloseHistory(symbol=symbol, date=market_time(), close=close, volume=volume)
         db.add(close_row)
         return close_row
 
@@ -103,7 +103,7 @@ class Iex:
                     if market_time().date()  == date.fromisoformat(event['paymentDate']):
                         pending_dividends[symbol] = {
                             'amount': event['amount'],
-                            'cutoff': date.fromisoformat(event['exDate'])}
+                            'cutoff': datetime.combine(date.fromisoformat(event['exDate']), time())}
             
             # process affected companies
             for symbol in pending_dividends:
@@ -119,7 +119,7 @@ class Iex:
                     value = dividend_amount * eligible_quantity
                     company.balance += value
                     # Record dividend income.
-                    db.add(Transactions(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=market_time()))
+                    db.add(Transaction(symbol=symbol, company=company_id, trans_type=2, trans_volume=eligible_quantity, trans_price=dividend_amount, date=market_time()))
 
     def buy(self, db, company_id, symbol, quantity, price):
         """Buy stock, at given price and quantity, without error checking."""
@@ -130,7 +130,7 @@ class Iex:
         company = self.get_company(db, company_id)
         company.balance -= value
         # record transaction
-        db.add(Transactions(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=market_time()))
+        db.add(Transaction(symbol=symbol, company=company_id, trans_type=1, trans_volume=quantity, trans_price=price, date=market_time()))
 
     def sell(self, db, company_id, symbol, quantity, price):
         """Sell stock, at given price and quantity, without error checking."""
@@ -151,7 +151,7 @@ class Iex:
         company = self.get_company(db, company_id)
         company.balance += value
         # Record sell transaction
-        db.add(Transactions(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=market_time()))
+        db.add(Transaction(symbol=symbol, company=company_id, trans_type=0, trans_volume=quantity, trans_price=price, date=market_time()))
     
     def update_symbols(self):
         """Update internal list of symbols."""
@@ -171,7 +171,7 @@ class Iex:
         with DB() as db:
             # get the close value of all stock in use
             symbols = self.get_symbols_in_use(db)
-            today = market_time().date()
+            now = market_time()
             for symbol in symbols:
                 quote = self.quote(symbol)
                 close = quote['close']
@@ -179,13 +179,13 @@ class Iex:
                 if not quote['close'] or not quote['volume']:
                     close = quote['previousClose']
                     volume = quote['previousVolume']
-                db.add(CloseHistory(symbol=symbol, date=today, close=close, volume=volume))
+                db.add(CloseHistory(symbol=symbol, date=now, close=close, volume=volume))
             companies = db.query(Company).filter(Company.active == True).all()
             # evaluate the net worth of every company
             for company in companies:
                 inventory = self.get_held_stocks(db, company.id)
                 value = company.balance
                 for stock in inventory:
-                    ch = db.query(CloseHistory).filter(CloseHistory.symbol == stock.symbol).filter(CloseHistory.date == today).first()
+                    ch = db.query(CloseHistory).filter(CloseHistory.symbol == stock.symbol).filter(CloseHistory.date == now).first()
                     value += ch.close * stock.quantity
-                db.add(CompanyHistory(company=company.id, date=today, value=value))
+                db.add(CompanyHistory(company=company.id, date=now, value=value))

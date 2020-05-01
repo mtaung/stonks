@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, Boolean, Date, Sequence, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Sequence, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -20,7 +20,7 @@ class CompanyHistory(Base):
     __tablename__ = 'company_history'
     id = Column(Integer, primary_key=True)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
-    date = Column(Date)
+    date = Column(DateTime)
     value = Column(Float)
 
 class HeldStock(Base):
@@ -30,13 +30,13 @@ class HeldStock(Base):
     quantity = Column(Integer)
     company = Column(Integer, ForeignKey('companies.id'), nullable=False)
     purchase_price = Column(Float)
-    purchase_date = Column(Date)
+    purchase_date = Column(DateTime)
 
 class CloseHistory(Base):
     __tablename__ = 'close_history'
     id = Column(Integer, primary_key=True)
     symbol = Column(String(6))
-    date = Column(Date)
+    date = Column(DateTime)
     close = Column(Float)
     volume = Column(Integer)
 
@@ -46,7 +46,7 @@ class Symbol(Base):
     name = Column(String(50))
     stock_type = Column(String(5))
 
-class Transactions(Base):
+class Transaction(Base):
     # Transaction types are classified as the following:
     # 0: sell
     # 1: buy
@@ -58,4 +58,4 @@ class Transactions(Base):
     trans_type = Column(Integer)
     trans_volume = Column(Integer)
     trans_price = Column(Float)
-    date = Column(Date)
+    date = Column(DateTime)
