@@ -32,6 +32,13 @@ def next_market_close():
 def next_daily_data():
     return next_daily_event(DAILY_DATA, tz=UTC)
 
+def next_market_hour():
+    if market_open_status() and (next_market_close() - market_time()).seconds > 3600:
+        start = market_time()
+    else:
+        start = next_market_open()
+    return datetime.combine(start.date(), time(start.time().hour + 1))
+
 class Scheduler:
     def __init__(self):
         self.scheduler = sched.scheduler(time_t.time, time_t.sleep)

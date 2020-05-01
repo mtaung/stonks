@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from utils import config
-from utils.scheduler import Scheduler, next_daily_data, next_market_close
+from utils.scheduler import Scheduler, next_daily_data, next_market_hour
 from modules.iex import Iex
 
 # Configs
@@ -22,7 +22,7 @@ for extension in startup_extensions:
 
 # Scheduler
 sched = Scheduler()
-sched.schedule(iex.evaluate, next_market_close)
+sched.schedule(iex.evaluate, next_market_hour)
 sched.schedule(iex.splits, next_daily_data)
 sched.schedule(iex.dividends, next_daily_data)
 sched.start()
