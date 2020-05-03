@@ -109,8 +109,9 @@ class Stonks(commands.Cog):
                 await ctx.send(f"{company.name}\nBalance: {company.balance} USD\nPurchase cost: {cost} USD")
                 raise StonksError()
 
+            value = price * quantity
             self.iex.buy(db, company.id, symbol, quantity, price)
-            await ctx.send(f"``{company.name} ⯮ {quantity} {symbol} @ {cost}``")
+            await ctx.send(f"``-{value} {company.name} ⯮ {quantity} {symbol} @ {price}``")
 
     @commands.command()
     async def sell(self, ctx, quantity: int, symbol: str):
@@ -130,7 +131,7 @@ class Stonks(commands.Cog):
             price = self.iex.price(symbol)
             value = price * quantity
             self.iex.sell(db, company.id, symbol, quantity, price)
-            await ctx.send(f"``{company.name} ⯬ {quantity} {symbol} @ {value}``")
+            await ctx.send(f"``+{value} {company.name} ⯬ {quantity} {symbol} @ {price}``")
 
     @commands.command()
     async def balance(self, ctx):
@@ -178,7 +179,7 @@ class Stonks(commands.Cog):
                 inventory.append([s.symbol, s.quantity, s.purchase_price, close.close, s.quantity*s.purchase_price - s.quantity*close.close]) 
             inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             inv_df['sign'] = np.where(inv_df['Current Value']>=0, '+', '-')
-            inv_df['%'] = abs(((inv_df['Purchase Price'] - inv_df['Close'])  / inv_df['Purchase Price']) * 100)
+            inv_df['%'] = abs(((inv_df['Close'] - inv_df['Purchase Price'])  / inv_df['Purchase Price']) * 100)
             inv_df['%'] = inv_df['%'].round(1)
             inv_df = inv_df.sort_values(['Symbol'])
             inv_df = inv_df[['sign', '%', 'Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value']]
