@@ -37,7 +37,7 @@ def next_market_hour():
         start = market_time()
     else:
         start = next_market_open()
-    return datetime.combine(start.date(), time(start.time().hour + 1))
+    return datetime.combine(start.date(), time(start.time().hour + 1), tzinfo=start.tzinfo)
 
 class Scheduler:
     def __init__(self):
