@@ -176,7 +176,7 @@ class Stonks(commands.Cog):
             inventory = []
             for s in stock:
                 close = await self.get_latest_close(ctx, db, s.symbol)
-                inventory.append([s.symbol, s.quantity, s.purchase_price, close.close, s.quantity*s.purchase_price - s.quantity*close.close]) 
+                inventory.append([s.symbol, s.quantity, s.purchase_price, close.close, s.quantity*close.close - s.quantity*s.purchase_price ]) 
             inv_df = pd.DataFrame(inventory, columns=['Symbol', 'Quantity', 'Purchase Price', 'Close', 'Current Value'])
             inv_df['sign'] = np.where(inv_df['Current Value']>=0, '+', '-')
             inv_df['%'] = abs(((inv_df['Close'] - inv_df['Purchase Price'])  / inv_df['Purchase Price']) * 100)
