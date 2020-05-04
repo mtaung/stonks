@@ -174,12 +174,9 @@ class Iex:
             now = market_time()
             for symbol in symbols:
                 quote = self.quote(symbol)
-                close = quote['close']
-                volume = quote['volume']
-                if not quote['close'] or not quote['volume']:
-                    close = quote['previousClose']
-                    volume = quote['previousVolume']
-                db.add(CloseHistory(symbol=symbol, date=now, close=close, volume=volume))
+                price = quote['latestPrice']
+                volume = quote['latestVolume']
+                db.add(CloseHistory(symbol=symbol, date=now, close=price, volume=volume))
             companies = db.query(Company).filter(Company.active == True).all()
             # evaluate the net worth of every company
             for company in companies:
