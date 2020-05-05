@@ -197,7 +197,7 @@ class Stonks(commands.Cog):
                 scores.append([company.name, round(history.value, 2)])
             headers = ['Company', 'Net Worth']
             score_df = pd.DataFrame(scores, columns=headers)
-            score_df = score_df.sort_values(['Net Worth'])
+            score_df = score_df.sort_values(['Net Worth'], ascending=False)
             aggregated = tabulate(score_df.values.tolist(), headers=headers)
             await ctx.send(f"```{aggregated}```")
 
