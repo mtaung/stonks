@@ -73,7 +73,7 @@ class Iex:
                 fromFactor = pending_splits[symbol]['from']
                 toFactor = pending_splits[symbol]['to']
 
-                sell_price = self.quote(symbol)['close']
+                sell_price = self.get_latest_close(db, symbol)
                 rebuy_price = sell_price * fromFactor / toFactor
 
                 for company_id in affected_companies:
