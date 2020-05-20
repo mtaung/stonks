@@ -56,12 +56,13 @@ class Iex:
         with DB() as db:
             unique_symbols = self.get_symbols_in_use(db)
             pending_splits = {}
+            now = market_time()
             # first, find which stocks start trading at split price today
             for symbol in unique_symbols:
                 stock = stocks.Stock(symbol, token = self.token)
                 splits = stock.get_splits(range='1m')
                 for split in splits:
-                    if market_time().date()  == date.fromisoformat(split['exDate']):
+                    if now.date()  == date.fromisoformat(split['exDate']):
                         pending_splits[symbol] = {
                             'from': split['fromFactor'],
                             'to': split['toFactor']}
@@ -73,7 +74,7 @@ class Iex:
                 fromFactor = pending_splits[symbol]['from']
                 toFactor = pending_splits[symbol]['to']
 
-                sell_price = self.get_latest_close(db, symbol)
+                sell_price = self.get_latest_close(db, symbol).close
                 rebuy_price = sell_price * fromFactor / toFactor
 
                 for company_id in affected_companies:
